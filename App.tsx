@@ -1244,10 +1244,16 @@ const App: React.FC = () => {
             {/* Owner Copy */}
             <button
               onClick={() => handleGenerate('OWNER')}
-              disabled={generatingCopy !== null || !templateFile}
-              className="w-full py-3 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2 text-base"
+              disabled={generatingCopy !== null || !templateFile || !data.hasLessor}
+              title={!data.hasLessor ? 'Enable the Lessor/Property Owner section above first' : ''}
+              className="w-full py-3 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2 text-base"
             >
-              {generatingCopy === 'OWNER' ? '⏳ Generating...' : '🏠 Download Owner Copy'}
+              {generatingCopy === 'OWNER' ? '⏳ Generating...' : (
+                <span className="flex flex-col items-center leading-tight">
+                  <span>🏠 Download Owner Copy</span>
+                  {!data.hasLessor && <span className="text-xs font-normal opacity-70">Enable Owner section to unlock</span>}
+                </span>
+              )}
             </button>
 
             {/* Agent Contract Copy — always visible, disabled if no agent */}
