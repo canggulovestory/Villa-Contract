@@ -139,10 +139,18 @@ export const generateDocument = async (
           followingPaymentDueDate: data.followingPaymentDueDate
             ? new Date(data.followingPaymentDueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
             : '',
-          paymentMethod: data.paymentMethod,
-          bankDetailsIDR: data.bankDetailsIDR,
-          wiseEuroAccount: data.wiseEuroAccount,
-          cryptoWalletAddress: data.cryptoWalletAddress,
+          paymentMethod: 'Bank Transfer',
+          bankDetailsIDR: [
+            'BANK CIMB NIAGA',
+            'Account Name: PT THE VILLA MANAGERS',
+            'IDR Account No: 800206006300',
+            'AUD Account No: 800206009950',
+            'EUR Account No: 800206008730',
+            'Branch: Denpasar | SWIFT: BNIAIDJA | Bank Code: 022 | Branch Code: 0424',
+            'Address: Jl. Subak Sari No 13, Tibubeneng \u2013 Kuta Utara Canggu \u2013 Kab. Badung, 80361, Bali \u2013 Indonesia',
+          ].join('\n'),
+          wiseEuroAccount: '',
+          cryptoWalletAddress: '',
 
           // Raw numbers (for math or custom formatting in doc)
           totalPriceRaw: data.totalPrice,

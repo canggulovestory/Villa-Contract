@@ -4,6 +4,11 @@
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY as string;
 
+// MIME types — must be declared before any function that uses them
+const SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const GDOC_MIME = 'application/vnd.google-apps.document';
+
 // ─── Fixed contract template on Google Drive ─────────────────────────────────
 // This is the "Lease Agreement 3rd party Template.docx" owned by PT The Villa Managers.
 // The system always fetches this automatically — no manual upload needed.
@@ -49,9 +54,6 @@ export async function autoLoadTemplate(): Promise<File> {
   const blob = await res.blob();
   return new File([blob], 'contract_template.docx', { type: DOCX_MIME });
 }
-const SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
-const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-const GDOC_MIME = 'application/vnd.google-apps.document';
 
 const DEFAULT_TEMPLATE_KEY = 'villa_default_template';
 

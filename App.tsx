@@ -16,7 +16,7 @@ import { PassportUploader } from './components/PassportUploader';
 import {
   User, Calendar, CreditCard, ListTodo, FileDown, Upload,
   Waves, Wifi, Zap, Shovel, Trash2, Home, Users, Plus, X,
-  Building2, Handshake, ChevronDown, ChevronUp, Globe, Landmark, Wallet
+  Building2, Handshake, ChevronDown, ChevronUp, Landmark
 } from 'lucide-react';
 
 const VILLA_TEMPLATES = [
@@ -41,7 +41,14 @@ const PARTNERSHIP_TYPES = [
 ];
 
 const CURRENCIES = ['IDR', 'USD', 'EUR', 'USDT'];
-const PAYMENT_METHODS = ['IDR bank transfer', 'WISE', 'Crypto (USDT TRC20)', 'IDR + WISE', 'IDR + Crypto'];
+// PT The Villa Managers — fixed bank details (always shown in contract)
+const TVM_BANK_DETAILS = `BANK CIMB NIAGA
+Account Name: PT THE VILLA MANAGERS
+IDR Account No: 800206006300
+AUD Account No: 800206009950
+EUR Account No: 800206008730
+Branch: Denpasar | SWIFT: BNIAIDJA | Bank Code: 022 | Branch Code: 0424
+Address: Jl. Subak Sari No 13, Tibubeneng – Kuta Utara Canggu – Kab. Badung, 80361, Bali – Indonesia`;
 
 const App: React.FC = () => {
   const [data, setData] = useState<ContractData>(INITIAL_DATA);
@@ -371,9 +378,6 @@ const App: React.FC = () => {
   };
 
   const isIDR = data.paymentCurrency === 'IDR';
-  const showCrypto = data.paymentMethod?.toLowerCase().includes('crypto');
-  const showWise = data.paymentMethod?.toLowerCase().includes('wise');
-  const showBank = data.paymentMethod?.toLowerCase().includes('idr') || data.paymentMethod?.toLowerCase().includes('bank');
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-20">
@@ -1010,68 +1014,22 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Payment Method */}
+            {/* Payment Bank Details — always PT The Villa Managers */}
             <div className="mt-5">
-              <label className="block text-sm font-semibold text-slate-600 mb-2">Payment Method</label>
-              <div className="flex flex-wrap gap-2 mb-3">
-                {PAYMENT_METHODS.map(m => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => handleInputChange('paymentMethod', m)}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition-all ${data.paymentMethod === m
-                      ? 'bg-emerald-600 text-white border-emerald-600'
-                      : 'bg-white text-slate-600 border-slate-300 hover:border-emerald-400'
-                      }`}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-1 gap-3">
-                {showBank && (
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1">
-                      <Landmark size={12} /> Bank Details (IDR)
-                    </label>
-                    <input
-                      type="text"
-                      value={data.bankDetailsIDR}
-                      onChange={e => handleInputChange('bankDetailsIDR', e.target.value)}
-                      className="w-full p-2 border border-slate-300 rounded text-sm focus:border-emerald-500 outline-none"
-                      placeholder="Bank name, Account holder, Account number"
-                    />
-                  </div>
-                )}
-                {showWise && (
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1">
-                      <Globe size={12} /> Wise / EURO Account
-                    </label>
-                    <input
-                      type="text"
-                      value={data.wiseEuroAccount}
-                      onChange={e => handleInputChange('wiseEuroAccount', e.target.value)}
-                      className="w-full p-2 border border-slate-300 rounded text-sm focus:border-emerald-500 outline-none"
-                      placeholder="Wise account email or account details"
-                    />
-                  </div>
-                )}
-                {showCrypto && (
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1">
-                      <Wallet size={12} /> Crypto USDT — Network: TRC20 — Wallet Address
-                    </label>
-                    <input
-                      type="text"
-                      value={data.cryptoWalletAddress}
-                      onChange={e => handleInputChange('cryptoWalletAddress', e.target.value)}
-                      className="w-full p-2 border border-slate-300 rounded text-sm focus:border-emerald-500 outline-none font-mono"
-                      placeholder="TRC20 wallet address"
-                    />
-                  </div>
-                )}
+              <label className="block text-sm font-semibold text-slate-600 mb-2 flex items-center gap-1">
+                <Landmark size={14} /> Payment Bank Details
+              </label>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                <p className="text-xs font-bold text-emerald-800 mb-2">PT THE VILLA MANAGERS — BANK CIMB NIAGA</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-700">
+                  <div><span className="font-semibold text-slate-500">IDR Account:</span> 800206006300</div>
+                  <div><span className="font-semibold text-slate-500">AUD Account:</span> 800206009950</div>
+                  <div><span className="font-semibold text-slate-500">EUR Account:</span> 800206008730</div>
+                  <div><span className="font-semibold text-slate-500">SWIFT:</span> BNIAIDJA</div>
+                  <div><span className="font-semibold text-slate-500">Branch:</span> Denpasar</div>
+                  <div><span className="font-semibold text-slate-500">Bank Code:</span> 022 | <span className="font-semibold text-slate-500">Branch Code:</span> 0424</div>
+                  <div className="col-span-2 mt-1 text-slate-500">Jl. Subak Sari No 13, Tibubeneng – Kuta Utara Canggu – Kab. Badung, 80361, Bali – Indonesia</div>
+                </div>
               </div>
             </div>
           </section>
