@@ -57,6 +57,7 @@ export const generateDocument = async (
           guestData[`guest${num}Passport`] = guest.passportNumber;
           guestData[`guest${num}Nationality`] = guest.nationality;
           guestData[`guest${num}Phone`] = guest.phone;
+          guestData[`guest${num}Birthplace`] = guest.birthplace || '';
           guestData[`guest${num}Birthday`] = guest.birthday
             ? new Date(guest.birthday).toLocaleDateString('en-GB')
             : '';
@@ -69,6 +70,7 @@ export const generateDocument = async (
           passportNumber: primaryGuest.passportNumber,
           nationality: primaryGuest.nationality,
           phone: primaryGuest.phone,
+          birthplace: primaryGuest.birthplace || '',
           birthday: primaryGuest.birthday
             ? new Date(primaryGuest.birthday).toLocaleDateString('en-GB')
             : '',
@@ -150,6 +152,42 @@ export const generateDocument = async (
           // ---- INCLUSIONS ----
           inclusionsList: computed.inclusionsList,
           otherInclusions: data.otherInclusions,
+          banjarFee: data.inclusions.banjarFee ? 'Yes' : 'No',
+          garbageFee: data.inclusions.rubbishFee ? 'Yes' : 'No',
+
+          // ---- COMMISSION (shown in OWNER COPY only) ----
+          ...((): Record<string, string | number> => {
+            if (copyType !== 'OWNER') {
+              return {
+                commissionTypeLabel: '',
+                commissionRateDisplay: '',
+                commissionAmountDisplay: '',
+                commissionNotes: '',
+              };
+            }
+            const c = data.commission;
+            const typeLabels: Record<string, string> = {
+              percentage_total: '% of Total Rent',
+              percentage_monthly: '% of Monthly Rent',
+              fixed: 'Fixed Amount',
+            };
+            // Auto-calculate if amount not set manually
+            let calcAmount = c.commissionAmount;
+            if (!calcAmount && c.commissionRate > 0) {
+              if (c.commissionType === 'percentage_total') {
+                calcAmount = Math.round(data.totalPrice * c.commissionRate / 100);
+              } else if (c.commissionType === 'percentage_monthly') {
+                calcAmount = Math.round(data.monthlyPrice * c.commissionRate / 100);
+              }
+            }
+            const cur = data.paymentCurrency || 'IDR';
+            return {
+              commissionTypeLabel: typeLabels[c.commissionType] || c.commissionType,
+              commissionRateDisplay: c.commissionRate > 0 ? `${c.commissionRate}%` : '',
+              commissionAmountDisplay: calcAmount > 0 ? formatCurrency(calcAmount, cur) : '',
+              commissionNotes: c.commissionNotes,
+            };
+          })(),
 
           // ---- AGENCY (always PT The Villa Managers) ----
           agencyName: 'PT The Villa Managers',

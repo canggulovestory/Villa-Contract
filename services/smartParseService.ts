@@ -9,6 +9,7 @@ export interface SmartParseResult {
   guestPassport: string;
   guestNationality: string;
   guestPhone: string;
+  guestBirthplace: string;
   guestBirthday: string;
   // Villa
   villaName: string;
@@ -250,7 +251,7 @@ const detectProsePrice = (text: string): number => {
 export const smartParse = (text: string): SmartParseResult => {
   const r: SmartParseResult = {
     detected: [],
-    guestName: '', guestPassport: '', guestNationality: '', guestPhone: '', guestBirthday: '',
+    guestName: '', guestPassport: '', guestNationality: '', guestPhone: '', guestBirthplace: '', guestBirthday: '',
     villaName: '', propertyCode: '',
     checkInDate: '', checkOutDate: '',
     totalPrice: 0, monthlyPrice: 0, paymentCurrency: '', securityDeposit: 0,
@@ -313,6 +314,12 @@ export const smartParse = (text: string): SmartParseResult => {
     'birthday', 'born', 'dob', 'date of birth', 'birth date', 'tanggal lahir', 'tgl lahir',
   );
   if (bdRaw) { r.guestBirthday = bdRaw; r.detected.push('Birthday'); }
+
+  // Birthplace
+  const bpRaw = extractLabel(text,
+    'birthplace', 'place of birth', 'born in', 'tempat lahir', 'place & date of birth', 'tempat tgl lahir',
+  );
+  if (bpRaw) { r.guestBirthplace = bpRaw; r.detected.push('Birthplace'); }
 
   // ── VILLA ──────────────────────────────────────────────────────────────────
   const villaLabelRaw = extractLabel(text, 'villa', 'property', 'unit', 'properti', 'rumah');

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ContractData, ComputedData, INITIAL_DATA, INITIAL_GUEST,
-  INITIAL_AGENT, LessorData, AgentData
+  INITIAL_AGENT, LessorData, AgentData, CommissionData
 } from './types';
 import { generateDocument, CopyType } from './services/docService';
 import { generateAgentRegistration } from './services/agentService';
-import { openDrivePicker, fetchDriveFile, saveDefaultTemplate, loadDefaultTemplateMeta, clearDefaultTemplate, SavedTemplate } from './services/driveService';
+import { openDrivePicker, fetchDriveFile, saveDefaultTemplate, loadDefaultTemplateMeta, clearDefaultTemplate, autoLoadTemplate, SavedTemplate } from './services/driveService';
 import {
   getSavedOwners, saveOwner, deleteOwner, SavedOwner,
   getSavedAgents, saveAgent, deleteAgent, SavedAgent,
@@ -49,6 +49,8 @@ const App: React.FC = () => {
 
   const [isDriveLoading, setIsDriveLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [templateStatus, setTemplateStatus] = useState<'loading' | 'drive' | 'bundled' | 'manual' | 'error'>('loading');
+  const [commissionOpen, setCommissionOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
   const [lessorOpen, setLessorOpen] = useState(false);
   const [savedOwners, setSavedOwners] = useState<SavedOwner[]>(() => getSavedOwners());
@@ -102,13 +104,24 @@ const App: React.FC = () => {
   const [savedTemplateMeta, setSavedTemplateMeta] = useState<SavedTemplate | null>(() => loadDefaultTemplateMeta());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-load default template on startup
+  // Auto-load template on startup: saved Drive → fixed Drive link → bundled /public/template.docx
   useEffect(() => {
     const meta = loadDefaultTemplateMeta();
     if (meta) {
+      // User has a previously-saved Drive file — load it
       fetchDriveFile(meta)
-        .then(file => setTemplateFile(file))
-        .catch(() => { /* silently fail */ });
+        .then(file => { setTemplateFile(file); setTemplateStatus('drive'); })
+        .catch(() => {
+          // Saved Drive file failed — fall back to auto-load
+          autoLoadTemplate()
+            .then(file => { setTemplateFile(file); setTemplateStatus('drive'); })
+            .catch(() => setTemplateStatus('error'));
+        });
+    } else {
+      // No saved preference — silently auto-load the fixed Drive template (or bundled fallback)
+      autoLoadTemplate()
+        .then(file => { setTemplateFile(file); setTemplateStatus('drive'); })
+        .catch(() => setTemplateStatus('error'));
     }
   }, []);
 
@@ -267,6 +280,7 @@ const App: React.FC = () => {
       if (parsed.guestNationality) updated.guests = [{ ...(updated.guests[0] || prev.guests[0]), nationality: parsed.guestNationality }];
       if (parsed.guestPhone) updated.guests = [{ ...(updated.guests[0] || prev.guests[0]), phone: parsed.guestPhone }];
       if (parsed.guestBirthday) updated.guests = [{ ...(updated.guests[0] || prev.guests[0]), birthday: parsed.guestBirthday }];
+      if (parsed.guestBirthplace) updated.guests = [{ ...(updated.guests[0] || prev.guests[0]), birthplace: parsed.guestBirthplace }];
       // Keep remaining guests (index 1+) intact
       if (prev.guests.length > 1) updated.guests = [updated.guests[0], ...prev.guests.slice(1)];
       // Villa
@@ -716,13 +730,23 @@ const App: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Place & Date of Birth</label>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Place of Birth <span className="text-slate-400 font-normal">(city/country)</span></label>
+                      <input
+                        type="text"
+                        value={guest.birthplace}
+                        onChange={e => updateGuest(index, 'birthplace', e.target.value)}
+                        className="w-full p-2 border border-slate-300 rounded text-sm focus:border-emerald-500 outline-none"
+                        placeholder="e.g. London, United Kingdom"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Date of Birth</label>
                       <input
                         type="text"
                         value={guest.birthday}
                         onChange={e => updateGuest(index, 'birthday', e.target.value)}
                         className="w-full p-2 border border-slate-300 rounded text-sm focus:border-emerald-500 outline-none"
-                        placeholder="e.g. London, 15 March 1990"
+                        placeholder="e.g. 15 March 1990"
                       />
                     </div>
                     <div>
@@ -1285,14 +1309,130 @@ const App: React.FC = () => {
 
         </div>
 
+        {/* ── COMMISSION SECTION ── */}
+        <section className="bg-white rounded-xl shadow-sm border border-amber-100 overflow-hidden">
+          <div
+            className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-amber-50 transition-colors"
+            onClick={() => setCommissionOpen(v => !v)}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                <span className="text-xl">💰</span>
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-800">Agency Commission</h2>
+                <p className="text-xs text-slate-500">Internal tracking — shown only in Owner Copy</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {data.commission.commissionRate > 0 && (
+                <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">
+                  {data.commission.commissionRate}% set
+                </span>
+              )}
+              {commissionOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+            </div>
+          </div>
+
+          {commissionOpen && (
+            <div className="px-5 pb-5 space-y-4">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                💡 Commission details appear <strong>only in the Owner Copy</strong> — not visible to the guest or agent.
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Commission Type</label>
+                  <select
+                    value={data.commission.commissionType}
+                    onChange={e => setData(prev => ({ ...prev, commission: { ...prev.commission, commissionType: e.target.value } }))}
+                    className="w-full p-2 border border-slate-300 rounded text-sm focus:border-amber-500 outline-none bg-white"
+                  >
+                    <option value="percentage_total">% of Total Rent</option>
+                    <option value="percentage_monthly">% of Monthly Rent</option>
+                    <option value="fixed">Fixed Amount</option>
+                  </select>
+                </div>
+                {data.commission.commissionType !== 'fixed' ? (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Commission Rate (%)</label>
+                    <input
+                      type="number"
+                      min="0" max="100" step="0.5"
+                      value={data.commission.commissionRate || ''}
+                      onChange={e => setData(prev => ({ ...prev, commission: { ...prev.commission, commissionRate: parseFloat(e.target.value) || 0 } }))}
+                      className="w-full p-2 border border-slate-300 rounded text-sm focus:border-amber-500 outline-none"
+                      placeholder="e.g. 10"
+                    />
+                    {data.commission.commissionRate > 0 && data.totalPrice > 0 && (
+                      <p className="text-xs text-amber-700 mt-1 font-semibold">
+                        = {new Intl.NumberFormat('id-ID').format(
+                            Math.round(
+                              (data.commission.commissionType === 'percentage_monthly' ? data.monthlyPrice : data.totalPrice)
+                              * data.commission.commissionRate / 100
+                            )
+                          )} {data.paymentCurrency}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Commission Amount ({data.paymentCurrency})</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={data.commission.commissionAmount || ''}
+                      onChange={e => setData(prev => ({ ...prev, commission: { ...prev.commission, commissionAmount: parseFloat(e.target.value) || 0 } }))}
+                      className="w-full p-2 border border-slate-300 rounded text-sm focus:border-amber-500 outline-none"
+                      placeholder="e.g. 5000000"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Payment Terms / Notes</label>
+                  <input
+                    type="text"
+                    value={data.commission.commissionNotes}
+                    onChange={e => setData(prev => ({ ...prev, commission: { ...prev.commission, commissionNotes: e.target.value } }))}
+                    className="w-full p-2 border border-slate-300 rounded text-sm focus:border-amber-500 outline-none"
+                    placeholder="e.g. Paid within 7 days of check-in"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
         {/* ── Generate Section ── */}
         <div className="bg-emerald-900 text-emerald-50 p-6 rounded-xl shadow-lg">
           <h3 className="text-lg font-bold mb-5 flex items-center gap-2">
             <FileDown className="w-5 h-5" /> Generate Documents
           </h3>
 
-          {/* Template Upload */}
-          <label className="block text-xs uppercase tracking-wider text-emerald-300 mb-2">1. Upload Contract Template (.docx / Google Docs)</label>
+          {/* Template status banner */}
+          {templateStatus === 'loading' && (
+            <div className="mb-4 p-3 bg-emerald-800/50 rounded-lg border border-emerald-600 text-sm text-emerald-300 flex items-center gap-2">
+              <span className="animate-spin">⏳</span> Loading template from Google Drive...
+            </div>
+          )}
+          {templateStatus === 'drive' && templateFile && (
+            <div className="mb-4 p-3 bg-emerald-700/40 rounded-lg border border-emerald-500 text-sm text-emerald-200 flex items-center gap-2">
+              ✅ <strong>Template auto-loaded:</strong> {templateFile.name} — always uses latest from Google Drive
+              <button
+                onClick={() => { setTemplateFile(null); setTemplateStatus('error'); }}
+                className="ml-auto text-xs text-emerald-400 hover:text-white underline"
+              >Override</button>
+            </div>
+          )}
+          {templateStatus === 'error' && (
+            <div className="mb-4 p-3 bg-red-900/30 rounded-lg border border-red-700 text-sm text-red-300">
+              ⚠️ Could not auto-load template. Please upload manually below.
+            </div>
+          )}
+
+          {/* Template Upload (override / fallback) */}
+          <label className="block text-xs uppercase tracking-wider text-emerald-300 mb-2">
+            {templateStatus === 'drive' ? 'Override Template (optional)' : '1. Upload Contract Template (.docx / Google Docs)'}
+          </label>
           <div
             className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${isDragging
               ? 'border-emerald-400 bg-emerald-800/60 scale-[1.01]'

@@ -1,10 +1,19 @@
 export interface Guest {
   id: string;
   name: string;
+  birthplace: string;     // Place of birth (for "Place & Date of Birth" in contract)
   birthday: string;
   nationality: string;
   phone: string;
   passportNumber: string; // also accepts Business Card / Company Profile reference
+}
+
+// --- Commission (internal tracking, shown only in OWNER COPY) ---
+export interface CommissionData {
+  commissionType: string;   // 'percentage_total' | 'percentage_monthly' | 'fixed'
+  commissionRate: number;   // % rate (if percentage type)
+  commissionAmount: number; // fixed amount or auto-calculated
+  commissionNotes: string;  // e.g. payment terms
 }
 
 // --- NEW: Lessor (Property Owner) ---
@@ -111,6 +120,9 @@ export interface ContractData {
   // Agent / Partner - NEW
   hasAgent: boolean;
   agent: AgentData;
+
+  // Commission (internal — appears only in OWNER COPY)
+  commission: CommissionData;
 }
 
 export interface ComputedData {
@@ -124,10 +136,18 @@ export interface ComputedData {
 export const INITIAL_GUEST: Guest = {
   id: '1',
   name: '',
+  birthplace: '',
   birthday: '',
   nationality: '',
   phone: '',
   passportNumber: '',
+};
+
+export const INITIAL_COMMISSION: CommissionData = {
+  commissionType: 'percentage_total',
+  commissionRate: 0,
+  commissionAmount: 0,
+  commissionNotes: '',
 };
 
 export const INITIAL_LESSOR: LessorData = {
@@ -206,4 +226,5 @@ export const INITIAL_DATA: ContractData = {
   hasLessor: false,
   hasAgent: false,
   agent: { ...INITIAL_AGENT },
+  commission: { ...INITIAL_COMMISSION },
 };

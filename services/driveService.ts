@@ -3,6 +3,52 @@
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY as string;
+
+// ─── Fixed contract template on Google Drive ─────────────────────────────────
+// This is the "Lease Agreement 3rd party Template.docx" owned by PT The Villa Managers.
+// The system always fetches this automatically — no manual upload needed.
+export const FIXED_TEMPLATE_FILE_ID = '1FaI-tBUkg2a8HBB4mGNoJ87z7p9AOX8x';
+export const FIXED_TEMPLATE_NAME = 'Lease Agreement 3rd party Template.docx';
+
+/**
+ * Download a publicly-shared Google Drive file using only an API key (no OAuth needed).
+ * Works for files shared as "Anyone with the link can view".
+ */
+export async function fetchPublicDriveFile(
+  fileId: string,
+  fileName: string = 'contract_template.docx'
+): Promise<File> {
+  if (!GOOGLE_API_KEY) throw new Error('VITE_GOOGLE_API_KEY not set');
+
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${encodeURIComponent(GOOGLE_API_KEY)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Google Drive fetch failed (${res.status}): ${res.statusText}`);
+
+  const blob = await res.blob();
+  return new File([blob], fileName, { type: DOCX_MIME });
+}
+
+/**
+ * Auto-load the fixed template from Google Drive (no popup, no OAuth).
+ * Falls back to fetching from /template.docx (bundled in public folder).
+ */
+export async function autoLoadTemplate(): Promise<File> {
+  // 1. Try Google Drive (requires VITE_GOOGLE_API_KEY to be set)
+  if (GOOGLE_API_KEY) {
+    try {
+      const file = await fetchPublicDriveFile(FIXED_TEMPLATE_FILE_ID, FIXED_TEMPLATE_NAME);
+      return file;
+    } catch (e) {
+      console.warn('Google Drive auto-fetch failed, trying bundled template:', e);
+    }
+  }
+
+  // 2. Fall back to bundled template served from /public
+  const res = await fetch('/template.docx');
+  if (!res.ok) throw new Error(`Bundled template not found (${res.status})`);
+  const blob = await res.blob();
+  return new File([blob], 'contract_template.docx', { type: DOCX_MIME });
+}
 const SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const GDOC_MIME = 'application/vnd.google-apps.document';
