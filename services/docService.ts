@@ -24,10 +24,13 @@ const formatCurrency = (value: number, currency: string) => {
   }).format(value) + ' ' + currency;
 };
 
+export type CopyType = 'CLIENT' | 'OWNER';
+
 export const generateDocument = async (
   templateFile: File,
   data: ContractData,
-  computed: ComputedData
+  computed: ComputedData,
+  copyType: CopyType = 'CLIENT'
 ) => {
   const reader = new FileReader();
 
@@ -174,9 +177,10 @@ export const generateDocument = async (
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         });
 
-        const filename = data.villaName
-          ? `Contract_${data.villaName.replace(/\s+/g, '_')}_${primaryGuest.name.split(' ')[0] || 'Guest'}.docx`
-          : `Contract_${primaryGuest.name.replace(/\s+/g, '_') || 'Guest'}.docx`;
+        const base = data.villaName
+          ? `Contract_${data.villaName.replace(/\s+/g, '_')}_${primaryGuest.name.split(' ')[0] || 'Guest'}`
+          : `Contract_${primaryGuest.name.replace(/\s+/g, '_') || 'Guest'}`;
+        const filename = `${base}_${copyType}.docx`;
 
         saveAs(out, filename);
         resolve();

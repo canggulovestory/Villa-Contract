@@ -3,7 +3,7 @@ import {
   ContractData, ComputedData, INITIAL_DATA, INITIAL_GUEST,
   INITIAL_AGENT, LessorData, AgentData
 } from './types';
-import { generateDocument } from './services/docService';
+import { generateDocument, CopyType } from './services/docService';
 import { generateAgentRegistration } from './services/agentService';
 import { openDrivePicker, fetchDriveFile, saveDefaultTemplate, loadDefaultTemplateMeta, clearDefaultTemplate, SavedTemplate } from './services/driveService';
 import { TemplateGuide } from './components/TemplateGuide';
@@ -41,7 +41,7 @@ const PAYMENT_METHODS = ['IDR bank transfer', 'WISE', 'Crypto (USDT TRC20)', 'ID
 const App: React.FC = () => {
   const [data, setData] = useState<ContractData>(INITIAL_DATA);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
+
   const [isDriveLoading, setIsDriveLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
@@ -195,18 +195,20 @@ const App: React.FC = () => {
     setData(prev => ({ ...prev, guests: newGuests }));
   };
 
-  const handleGenerate = async () => {
+  const [generatingCopy, setGeneratingCopy] = useState<CopyType | null>(null);
+
+  const handleGenerate = async (copyType: CopyType) => {
     if (!templateFile) {
       alert("Please upload a .docx template first!");
       return;
     }
-    setIsGenerating(true);
+    setGeneratingCopy(copyType);
     try {
-      await generateDocument(templateFile, data, computedData);
+      await generateDocument(templateFile, data, computedData, copyType);
     } catch (e) {
       alert("Error generating document. Check the console or ensure your template is valid.");
     } finally {
-      setIsGenerating(false);
+      setGeneratingCopy(null);
     }
   };
 
@@ -1091,22 +1093,32 @@ const App: React.FC = () => {
           {/* Generate buttons */}
           <label className="block text-xs uppercase tracking-wider text-emerald-300 mt-6 mb-3">2. Generate Documents</label>
           <div className="space-y-3">
-            {/* Main contract */}
+            {/* Client Copy */}
             <button
-              onClick={handleGenerate}
-              disabled={isGenerating || !templateFile}
-              className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2 text-lg"
+              onClick={() => handleGenerate('CLIENT')}
+              disabled={generatingCopy !== null || !templateFile}
+              className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2 text-base"
             >
-              {isGenerating ? 'Generating...' : '📄 Download 3-Party Contract (.docx)'}
+              {generatingCopy === 'CLIENT' ? '⏳ Generating...' : '📄 Download Client Copy'}
             </button>
 
-            {/* Agent registration — only shown when agent is enabled */}
+            {/* Owner Copy */}
+            <button
+              onClick={() => handleGenerate('OWNER')}
+              disabled={generatingCopy !== null || !templateFile}
+              className="w-full py-3 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2 text-base"
+            >
+              {generatingCopy === 'OWNER' ? '⏳ Generating...' : '🏠 Download Owner Copy'}
+            </button>
+
+            {/* Agent copy — only shown when agent is enabled */}
             {data.hasAgent && (
               <button
                 onClick={handleGenerateAgent}
-                className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2 text-base"
+                disabled={generatingCopy !== null}
+                className="w-full py-3 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2 text-base"
               >
-                🤝 Generate Agent Registration Form
+                🤝 Download Agent Registration
               </button>
             )}
           </div>
