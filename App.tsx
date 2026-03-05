@@ -380,21 +380,21 @@ const App: React.FC = () => {
         <div className="space-y-8">
 
           {/* ── SMART PASTE BOX ── */}
-          <section className="bg-slate-900 rounded-xl shadow-lg border border-slate-700 overflow-hidden">
+          <section className="bg-white rounded-xl shadow-sm border border-emerald-100 overflow-hidden">
             <div
-              className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-slate-800 transition-colors"
+              className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
               onClick={() => setSmartPasteOpen(v => !v)}
             >
               <div className="flex items-center gap-3">
                 <span className="text-2xl">⚡</span>
                 <div>
-                  <h2 className="text-base font-bold text-white">Smart Auto-Fill</h2>
-                  <p className="text-xs text-slate-400">Paste WhatsApp message, email, or any raw text — system detects & fills the form</p>
+                  <h2 className="text-base font-bold text-slate-800">Smart Auto-Fill</h2>
+                  <p className="text-xs text-slate-500">Paste WhatsApp message, email, or any raw text — system detects & fills the form</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 {smartPasteResult && smartPasteResult.detected.length > 0 && (
-                  <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-semibold">
+                  <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">
                     ✓ {smartPasteResult.detected.length} fields filled
                   </span>
                 )}
@@ -411,7 +411,7 @@ const App: React.FC = () => {
                   value={smartPasteText}
                   onChange={e => { setSmartPasteText(e.target.value); setSmartPasteResult(null); }}
                   rows={6}
-                  className="w-full bg-slate-800 text-slate-100 placeholder-slate-500 border border-slate-600 rounded-lg p-3 text-sm font-mono focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y"
+                  className="w-full bg-slate-50 text-slate-800 placeholder-slate-400 border border-slate-200 rounded-lg p-3 text-sm font-mono focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y"
                   placeholder={`Paste anything here, e.g.:\n\nGuest: John Smith\nNationality: British\nPassport: AB123456\nPhone: +44 7911 123456\nCheck in: 1 April 2025\nCheck out: 30 April 2025\nVilla: Villa Serenity\nPrice: IDR 45,000,000\nAgent: Bali Tours, PIC: Made Wijaya`}
                 />
 
@@ -420,7 +420,7 @@ const App: React.FC = () => {
                     type="button"
                     onClick={handleSmartParse}
                     disabled={!smartPasteText.trim()}
-                    className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-all text-sm flex items-center gap-2"
+                    className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-all text-sm flex items-center gap-2"
                   >
                     ⚡ Parse & Auto-Fill Form
                   </button>
@@ -428,7 +428,7 @@ const App: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => { setSmartPasteText(''); setSmartPasteResult(null); }}
-                      className="px-3 py-2 text-slate-400 hover:text-white text-xs rounded-lg border border-slate-600 hover:border-slate-400 transition-all"
+                      className="px-3 py-2 text-slate-500 hover:text-slate-700 text-xs rounded-lg border border-slate-200 hover:border-slate-400 transition-all"
                     >
                       Clear
                     </button>
@@ -437,27 +437,27 @@ const App: React.FC = () => {
 
                 {/* Result summary */}
                 {smartPasteResult && (
-                  <div className={`p-3 rounded-lg text-xs ${smartPasteResult.detected.length > 0 ? 'bg-emerald-900/40 border border-emerald-700' : 'bg-red-900/30 border border-red-700'}`}>
+                  <div className={`p-3 rounded-lg text-xs ${smartPasteResult.detected.length > 0 ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
                     {smartPasteResult.detected.length > 0 ? (
                       <>
-                        <p className="text-emerald-400 font-bold mb-2">✅ Detected & filled {smartPasteResult.detected.length} fields:</p>
+                        <p className="text-emerald-700 font-bold mb-2">✅ Detected & filled {smartPasteResult.detected.length} fields:</p>
                         <div className="flex flex-wrap gap-1.5">
                           {smartPasteResult.detected.map(f => (
-                            <span key={f} className="bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full">{f}</span>
+                            <span key={f} className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">{f}</span>
                           ))}
                         </div>
                         <p className="text-slate-500 mt-2">Review the form below and correct anything if needed.</p>
                       </>
                     ) : (
-                      <p className="text-red-400">⚠️ No fields detected. Try adding labels like "Name:", "Check in:", "Villa:", "Price:", etc.</p>
+                      <p className="text-red-600">⚠️ No fields detected. Try adding labels like "Name:", "Check in:", "Villa:", "Price:", etc.</p>
                     )}
                   </div>
                 )}
 
                 {/* Hints */}
                 {!smartPasteResult && (
-                  <div className="text-xs text-slate-500 space-y-1">
-                    <p>💡 <span className="text-slate-400">Supported labels:</span> Name · Passport · Nationality · Phone · Check in/out · Villa · Price · Monthly · Deposit · Owner · Agent · PIC · Email</p>
+                  <div className="text-xs text-slate-400 space-y-1">
+                    <p>💡 <span className="text-slate-500">Supported labels:</span> Name · Passport · Nationality · Phone · Check in/out · Villa · Price · Monthly · Deposit · Owner · Agent · PIC · Email</p>
                     <p>💡 Works with casual messages too — just paste and try!</p>
                   </div>
                 )}
