@@ -35,6 +35,8 @@ const VARIABLES = [
   { tag: '{{numberOfNights}}', desc: 'Total duration in nights' },
   { tag: '{{numberOfMonths}}', desc: 'Duration in months (pro-rated)' },
   { tag: '{{todayDate}}', desc: 'Today\'s date (auto-filled)' },
+  { tag: '{{copyLabel}}', desc: '⭐ Which copy: CLIENT COPY / OWNER COPY / AGENT COPY' },
+  { tag: '{{copyFor}}', desc: '⭐ Recipient label: Lessee / Lessor / Agency' },
   // Financial
   { tag: '{{paymentCurrency}}', desc: 'Currency: IDR / USD / EUR / USDT' },
   { tag: '{{monthlyPrice}}', desc: 'Monthly / base rent amount' },

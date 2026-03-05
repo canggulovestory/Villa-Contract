@@ -6,6 +6,10 @@ import {
 import { generateDocument, CopyType } from './services/docService';
 import { generateAgentRegistration } from './services/agentService';
 import { openDrivePicker, fetchDriveFile, saveDefaultTemplate, loadDefaultTemplateMeta, clearDefaultTemplate, SavedTemplate } from './services/driveService';
+import {
+  getSavedOwners, saveOwner, deleteOwner, SavedOwner,
+  getSavedAgents, saveAgent, deleteAgent, SavedAgent,
+} from './services/contactsService';
 import { TemplateGuide } from './components/TemplateGuide';
 import { PassportUploader } from './components/PassportUploader';
 import {
@@ -45,6 +49,55 @@ const App: React.FC = () => {
   const [isDriveLoading, setIsDriveLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
+  const [lessorOpen, setLessorOpen] = useState(false);
+  const [savedOwners, setSavedOwners] = useState<SavedOwner[]>(() => getSavedOwners());
+  const [savedAgents, setSavedAgents] = useState<SavedAgent[]>(() => getSavedAgents());
+
+  const handleSaveOwner = () => {
+    if (!data.lessor.name.trim()) { alert('Please enter at least the owner name first.'); return; }
+    saveOwner(data.lessor);
+    setSavedOwners(getSavedOwners());
+    alert(`✅ "${data.lessor.name}" saved to your owner contacts!`);
+  };
+
+  const handleLoadOwner = (id: string) => {
+    const found = savedOwners.find(o => o.id === id);
+    if (found) {
+      const { id: _id, savedAt: _s, ...lessorData } = found;
+      setData(prev => ({ ...prev, lessor: lessorData, hasLessor: true }));
+      setLessorOpen(true);
+    }
+  };
+
+  const handleDeleteOwner = (id: string) => {
+    if (!confirm('Remove this owner from saved contacts?')) return;
+    deleteOwner(id);
+    setSavedOwners(getSavedOwners());
+  };
+
+  const handleSaveAgent = () => {
+    if (!data.agent.companyName.trim() && !data.agent.agentPIC.trim()) {
+      alert('Please enter at least the company name or agent PIC first.');
+      return;
+    }
+    saveAgent(data.agent);
+    setSavedAgents(getSavedAgents());
+    alert(`✅ "${data.agent.companyName || data.agent.agentPIC}" saved to your agent contacts!`);
+  };
+
+  const handleLoadAgent = (id: string) => {
+    const found = savedAgents.find(a => a.id === id);
+    if (found) {
+      setData(prev => ({ ...prev, agent: found.data, hasAgent: true }));
+      setAgentOpen(true);
+    }
+  };
+
+  const handleDeleteAgent = (id: string) => {
+    if (!confirm('Remove this agent from saved contacts?')) return;
+    deleteAgent(id);
+    setSavedAgents(getSavedAgents());
+  };
   const [savedTemplateMeta, setSavedTemplateMeta] = useState<SavedTemplate | null>(() => loadDefaultTemplateMeta());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -333,65 +386,122 @@ const App: React.FC = () => {
             </div>
           </section>
 
-          {/* ── SECTION: Lessor (Property Owner) — NEW ── */}
-          <section className="bg-white p-6 rounded-xl shadow-sm border border-amber-100">
-            <h2 className="text-xl font-bold text-amber-900 flex items-center gap-2 mb-1">
-              <Building2 className="w-5 h-5" /> Lessor / Property Owner
-            </h2>
-            <p className="text-xs text-amber-600 mb-4">Party 1 – The person/entity who owns the villa being rented out</p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-slate-600 mb-1">Full Name / Company Name</label>
-                <input
-                  type="text"
-                  value={data.lessor.name}
-                  onChange={e => handleLessorChange('name', e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-amber-400 outline-none transition"
-                  placeholder="e.g. Wayan Santosa / PT Property Owner"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-slate-600 mb-1">
-                  Registered Address <span className="font-normal text-slate-400">or</span> Place & Date of Birth
-                </label>
-                <input
-                  type="text"
-                  value={data.lessor.addressOrBirth}
-                  onChange={e => handleLessorChange('addressOrBirth', e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-amber-400 outline-none transition"
-                  placeholder="e.g. Jl. Sunset Road No. 5, Seminyak — or — Denpasar, 12 June 1980"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1">Country of Incorporation / Nationality</label>
-                <input
-                  type="text"
-                  value={data.lessor.country}
-                  onChange={e => handleLessorChange('country', e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-amber-400 outline-none transition"
-                  placeholder="e.g. Indonesia"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1">NIK / National ID / Passport No.</label>
-                <input
-                  type="text"
-                  value={data.lessor.nik}
-                  onChange={e => handleLessorChange('nik', e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-amber-400 outline-none transition"
-                  placeholder="e.g. 5171xxxxxxxxxxxxxx"
-                />
+          {/* ── SECTION: Lessor (Property Owner) — toggleable like Agent ── */}
+          <section className="bg-white rounded-xl shadow-sm border border-amber-100 overflow-hidden">
+            {/* Toggle header */}
+            <div
+              className="p-5 cursor-pointer hover:bg-amber-50 transition-colors"
+              onClick={() => {
+                setLessorOpen(v => !v);
+                if (!data.hasLessor) handleInputChange('hasLessor', true);
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${data.hasLessor ? 'bg-amber-100' : 'bg-slate-100'}`}>
+                    <Building2 className={`w-5 h-5 ${data.hasLessor ? 'text-amber-600' : 'text-slate-400'}`} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-amber-900 flex items-center gap-2">
+                      Lessor / Property Owner
+                      {data.hasLessor && data.lessor.name && (
+                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">{data.lessor.name}</span>
+                      )}
+                    </h2>
+                    <p className="text-xs text-amber-500">Owner data available for this deal? Enable to enter details.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); handleInputChange('hasLessor', !data.hasLessor); setLessorOpen(!data.hasLessor); }}
+                    className={`relative inline-flex w-12 h-6 rounded-full transition-colors ${data.hasLessor ? 'bg-amber-500' : 'bg-slate-300'}`}
+                  >
+                    <span className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform mt-0.5 ${data.hasLessor ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                  {lessorOpen ? <ChevronUp className="w-5 h-5 text-amber-400" /> : <ChevronDown className="w-5 h-5 text-amber-400" />}
+                </div>
               </div>
             </div>
 
-            {/* Agency info — fixed, read-only */}
-            <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-100">
-              <p className="text-xs font-semibold text-amber-700 mb-1">Agency (Party 3) — Auto-filled</p>
-              <p className="text-xs text-amber-600">
-                <strong>PT The Villa Managers</strong> · Jl Intan Permai, Kerobokan Kelod, Indonesia · NIB: 0702250138139
-              </p>
-            </div>
+            {/* Lessor Form — collapsible */}
+            {lessorOpen && data.hasLessor && (
+              <div className="border-t border-amber-100 p-6 space-y-4">
+
+                {/* Saved owners selector */}
+                {savedOwners.length > 0 && (
+                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                    <label className="block text-xs font-bold text-amber-700 mb-2">📂 Load from Saved Owners</label>
+                    <div className="flex flex-wrap gap-2">
+                      {savedOwners.map(o => (
+                        <div key={o.id} className="flex items-center gap-1 bg-white border border-amber-200 rounded-full pl-3 pr-1 py-1">
+                          <button
+                            type="button"
+                            onClick={() => handleLoadOwner(o.id)}
+                            className="text-xs font-semibold text-amber-800 hover:text-amber-600"
+                          >
+                            {o.name}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteOwner(o.id)}
+                            className="w-4 h-4 text-slate-400 hover:text-red-500 flex items-center justify-center"
+                          >
+                            <X size={10} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-semibold text-slate-600 mb-1">Full Name / Company Name</label>
+                    <input type="text" value={data.lessor.name} onChange={e => handleLessorChange('name', e.target.value)}
+                      className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-amber-400 outline-none transition"
+                      placeholder="e.g. Wayan Santosa / PT Property Owner" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-semibold text-slate-600 mb-1">
+                      Registered Address <span className="font-normal text-slate-400">or</span> Place & Date of Birth
+                    </label>
+                    <input type="text" value={data.lessor.addressOrBirth} onChange={e => handleLessorChange('addressOrBirth', e.target.value)}
+                      className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-amber-400 outline-none transition"
+                      placeholder="e.g. Jl. Sunset Road No. 5, Seminyak — or — Denpasar, 12 June 1980" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1">Country / Nationality</label>
+                    <input type="text" value={data.lessor.country} onChange={e => handleLessorChange('country', e.target.value)}
+                      className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-amber-400 outline-none transition"
+                      placeholder="e.g. Indonesia" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1">NIK / National ID / Passport No.</label>
+                    <input type="text" value={data.lessor.nik} onChange={e => handleLessorChange('nik', e.target.value)}
+                      className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-amber-400 outline-none transition"
+                      placeholder="e.g. 5171xxxxxxxxxxxxxx" />
+                  </div>
+                </div>
+
+                {/* Save owner button */}
+                <button
+                  type="button"
+                  onClick={handleSaveOwner}
+                  className="mt-1 px-4 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-white rounded-lg transition-all flex items-center gap-1"
+                >
+                  💾 Save Owner to Contacts
+                </button>
+
+                {/* Agency info — fixed, read-only */}
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
+                  <p className="text-xs font-semibold text-amber-700 mb-1">Agency (Party 3) — Auto-filled</p>
+                  <p className="text-xs text-amber-600">
+                    <strong>PT The Villa Managers</strong> · Jl Intan Permai, Kerobokan Kelod, Indonesia · NIB: 0702250138139
+                  </p>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* ── SECTION: Guests / Lessee ── */}
@@ -871,6 +981,26 @@ const App: React.FC = () => {
             {agentOpen && data.hasAgent && (
               <div className="border-t border-purple-100 p-6 space-y-6">
 
+                {/* Saved agents selector */}
+                {savedAgents.length > 0 && (
+                  <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                    <label className="block text-xs font-bold text-purple-700 mb-2">📂 Load from Saved Agents</label>
+                    <div className="flex flex-wrap gap-2">
+                      {savedAgents.map(a => (
+                        <div key={a.id} className="flex items-center gap-1 bg-white border border-purple-200 rounded-full pl-3 pr-1 py-1">
+                          <button type="button" onClick={() => handleLoadAgent(a.id)} className="text-xs font-semibold text-purple-800 hover:text-purple-600">
+                            {a.companyName || a.agentPIC}
+                            <span className="ml-1 font-normal text-purple-400">{a.partnershipType}</span>
+                          </button>
+                          <button type="button" onClick={() => handleDeleteAgent(a.id)} className="w-4 h-4 text-slate-400 hover:text-red-500 flex items-center justify-center">
+                            <X size={10} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* A. Partnership Type */}
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-widest text-purple-700 mb-3">A. Partnership Type</h3>
@@ -997,6 +1127,15 @@ const App: React.FC = () => {
                   </p>
                 </div>
 
+                {/* Save agent button */}
+                <button
+                  type="button"
+                  onClick={handleSaveAgent}
+                  className="w-full py-2 text-sm font-bold bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-all flex items-center justify-center gap-2"
+                >
+                  💾 Save Agent to Contacts
+                </button>
+
               </div>
             )}
           </section>
@@ -1111,14 +1250,29 @@ const App: React.FC = () => {
               {generatingCopy === 'OWNER' ? '⏳ Generating...' : '🏠 Download Owner Copy'}
             </button>
 
-            {/* Agent copy — only shown when agent is enabled */}
+            {/* Agent Contract Copy — always visible, disabled if no agent */}
+            <button
+              onClick={() => handleGenerate('AGENT')}
+              disabled={generatingCopy !== null || !templateFile || !data.hasAgent}
+              title={!data.hasAgent ? 'Enable the Agent/Partner section above first' : ''}
+              className="w-full py-3 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2 text-base"
+            >
+              {generatingCopy === 'AGENT' ? '⏳ Generating...' : (
+                <span className="flex flex-col items-center leading-tight">
+                  <span>🤝 Download Agent Copy</span>
+                  {!data.hasAgent && <span className="text-xs font-normal opacity-70">Enable Agent section to unlock</span>}
+                </span>
+              )}
+            </button>
+
+            {/* Agent Registration Form — separate, only when agent enabled */}
             {data.hasAgent && (
               <button
                 onClick={handleGenerateAgent}
                 disabled={generatingCopy !== null}
-                className="w-full py-3 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2 text-base"
+                className="w-full py-2 bg-purple-900/60 hover:bg-purple-800/80 disabled:opacity-50 text-purple-200 font-semibold rounded-lg border border-purple-700 transition-all flex items-center justify-center gap-2 text-sm"
               >
-                🤝 Download Agent Registration
+                📋 Generate Agent Registration Form (printable)
               </button>
             )}
           </div>

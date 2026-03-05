@@ -105,6 +105,9 @@ export interface ContractData {
   };
   otherInclusions: string;
 
+  // Lessor toggle (like agent — optional if owner data not available)
+  hasLessor: boolean;
+
   // Agent / Partner - NEW
   hasAgent: boolean;
   agent: AgentData;
@@ -200,6 +203,7 @@ export const INITIAL_DATA: ContractData = {
     electricity: true,
   },
   otherInclusions: '',
+  hasLessor: false,
   hasAgent: false,
   agent: { ...INITIAL_AGENT },
 };

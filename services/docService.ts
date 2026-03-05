@@ -24,7 +24,7 @@ const formatCurrency = (value: number, currency: string) => {
   }).format(value) + ' ' + currency;
 };
 
-export type CopyType = 'CLIENT' | 'OWNER';
+export type CopyType = 'CLIENT' | 'OWNER' | 'AGENT';
 
 export const generateDocument = async (
   templateFile: File,
@@ -167,6 +167,14 @@ export const generateDocument = async (
 
           // ---- TODAY'S DATE ----
           todayDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+
+          // ---- COPY LABEL (use {{copyLabel}} in your template to mark which copy this is) ----
+          copyLabel: copyType === 'CLIENT' ? 'CLIENT COPY'
+            : copyType === 'OWNER' ? 'OWNER COPY'
+            : 'AGENT COPY',
+          copyFor: copyType === 'CLIENT' ? 'Lessee / Guest'
+            : copyType === 'OWNER' ? 'Lessor / Property Owner'
+            : 'Agency / Agent',
         };
 
         doc.render(templateData);
