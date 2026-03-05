@@ -10,6 +10,7 @@ import {
   getSavedOwners, saveOwner, deleteOwner, SavedOwner,
   getSavedAgents, saveAgent, deleteAgent, SavedAgent,
 } from './services/contactsService';
+import { smartParse, SmartParseResult } from './services/smartParseService';
 import { TemplateGuide } from './components/TemplateGuide';
 import { PassportUploader } from './components/PassportUploader';
 import {
@@ -248,6 +249,62 @@ const App: React.FC = () => {
     setData(prev => ({ ...prev, guests: newGuests }));
   };
 
+  const [smartPasteText, setSmartPasteText] = useState('');
+  const [smartPasteResult, setSmartPasteResult] = useState<SmartParseResult | null>(null);
+  const [smartPasteOpen, setSmartPasteOpen] = useState(true);
+
+  const handleSmartParse = () => {
+    if (!smartPasteText.trim()) return;
+    const parsed = smartParse(smartPasteText);
+    setSmartPasteResult(parsed);
+    if (parsed.detected.length === 0) return;
+
+    setData(prev => {
+      const updated = { ...prev };
+      // Guest fields
+      if (parsed.guestName) updated.guests = [{ ...prev.guests[0], name: parsed.guestName }];
+      if (parsed.guestPassport) updated.guests = [{ ...(updated.guests[0] || prev.guests[0]), passportNumber: parsed.guestPassport }];
+      if (parsed.guestNationality) updated.guests = [{ ...(updated.guests[0] || prev.guests[0]), nationality: parsed.guestNationality }];
+      if (parsed.guestPhone) updated.guests = [{ ...(updated.guests[0] || prev.guests[0]), phone: parsed.guestPhone }];
+      if (parsed.guestBirthday) updated.guests = [{ ...(updated.guests[0] || prev.guests[0]), birthday: parsed.guestBirthday }];
+      // Keep remaining guests (index 1+) intact
+      if (prev.guests.length > 1) updated.guests = [updated.guests[0], ...prev.guests.slice(1)];
+      // Villa
+      if (parsed.villaName) updated.villaName = parsed.villaName;
+      if (parsed.propertyCode) updated.propertyCode = parsed.propertyCode;
+      // Stay
+      if (parsed.checkInDate) updated.checkInDate = parsed.checkInDate;
+      if (parsed.checkOutDate) updated.checkOutDate = parsed.checkOutDate;
+      // Financials
+      if (parsed.paymentCurrency) updated.paymentCurrency = parsed.paymentCurrency;
+      if (parsed.totalPrice) updated.totalPrice = parsed.totalPrice;
+      if (parsed.monthlyPrice) updated.monthlyPrice = parsed.monthlyPrice;
+      if (parsed.securityDeposit) updated.securityDeposit = parsed.securityDeposit;
+      // Lessor
+      if (parsed.lessorName) {
+        updated.hasLessor = true;
+        updated.lessor = { ...prev.lessor, name: parsed.lessorName };
+        setLessorOpen(true);
+      }
+      if (parsed.lessorNIK) updated.lessor = { ...updated.lessor, nik: parsed.lessorNIK };
+      if (parsed.lessorCountry) updated.lessor = { ...updated.lessor, country: parsed.lessorCountry };
+      // Agent
+      if (parsed.agentCompanyName || parsed.agentPIC || parsed.agentEmail) {
+        updated.hasAgent = true;
+        updated.agent = {
+          ...prev.agent,
+          ...(parsed.agentCompanyName ? { companyName: parsed.agentCompanyName } : {}),
+          ...(parsed.agentPIC ? { agentPIC: parsed.agentPIC, picFullName: parsed.agentPIC } : {}),
+          ...(parsed.agentPhone ? { whatsappNumber: parsed.agentPhone, officePhone: parsed.agentPhone } : {}),
+          ...(parsed.agentEmail ? { agentEmail: parsed.agentEmail } : {}),
+          ...(parsed.agentPartnershipType ? { partnershipType: parsed.agentPartnershipType } : {}),
+        };
+        setAgentOpen(true);
+      }
+      return updated;
+    });
+  };
+
   const [generatingCopy, setGeneratingCopy] = useState<CopyType | null>(null);
 
   const handleGenerate = async (copyType: CopyType) => {
@@ -321,6 +378,92 @@ const App: React.FC = () => {
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
         <div className="space-y-8">
+
+          {/* ── SMART PASTE BOX ── */}
+          <section className="bg-slate-900 rounded-xl shadow-lg border border-slate-700 overflow-hidden">
+            <div
+              className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-slate-800 transition-colors"
+              onClick={() => setSmartPasteOpen(v => !v)}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">⚡</span>
+                <div>
+                  <h2 className="text-base font-bold text-white">Smart Auto-Fill</h2>
+                  <p className="text-xs text-slate-400">Paste WhatsApp message, email, or any raw text — system detects & fills the form</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {smartPasteResult && smartPasteResult.detected.length > 0 && (
+                  <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-semibold">
+                    ✓ {smartPasteResult.detected.length} fields filled
+                  </span>
+                )}
+                {smartPasteOpen
+                  ? <ChevronUp className="w-4 h-4 text-slate-400" />
+                  : <ChevronDown className="w-4 h-4 text-slate-400" />
+                }
+              </div>
+            </div>
+
+            {smartPasteOpen && (
+              <div className="px-5 pb-5 space-y-3">
+                <textarea
+                  value={smartPasteText}
+                  onChange={e => { setSmartPasteText(e.target.value); setSmartPasteResult(null); }}
+                  rows={6}
+                  className="w-full bg-slate-800 text-slate-100 placeholder-slate-500 border border-slate-600 rounded-lg p-3 text-sm font-mono focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y"
+                  placeholder={`Paste anything here, e.g.:\n\nGuest: John Smith\nNationality: British\nPassport: AB123456\nPhone: +44 7911 123456\nCheck in: 1 April 2025\nCheck out: 30 April 2025\nVilla: Villa Serenity\nPrice: IDR 45,000,000\nAgent: Bali Tours, PIC: Made Wijaya`}
+                />
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSmartParse}
+                    disabled={!smartPasteText.trim()}
+                    className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-all text-sm flex items-center gap-2"
+                  >
+                    ⚡ Parse & Auto-Fill Form
+                  </button>
+                  {smartPasteText && (
+                    <button
+                      type="button"
+                      onClick={() => { setSmartPasteText(''); setSmartPasteResult(null); }}
+                      className="px-3 py-2 text-slate-400 hover:text-white text-xs rounded-lg border border-slate-600 hover:border-slate-400 transition-all"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {/* Result summary */}
+                {smartPasteResult && (
+                  <div className={`p-3 rounded-lg text-xs ${smartPasteResult.detected.length > 0 ? 'bg-emerald-900/40 border border-emerald-700' : 'bg-red-900/30 border border-red-700'}`}>
+                    {smartPasteResult.detected.length > 0 ? (
+                      <>
+                        <p className="text-emerald-400 font-bold mb-2">✅ Detected & filled {smartPasteResult.detected.length} fields:</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {smartPasteResult.detected.map(f => (
+                            <span key={f} className="bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full">{f}</span>
+                          ))}
+                        </div>
+                        <p className="text-slate-500 mt-2">Review the form below and correct anything if needed.</p>
+                      </>
+                    ) : (
+                      <p className="text-red-400">⚠️ No fields detected. Try adding labels like "Name:", "Check in:", "Villa:", "Price:", etc.</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Hints */}
+                {!smartPasteResult && (
+                  <div className="text-xs text-slate-500 space-y-1">
+                    <p>💡 <span className="text-slate-400">Supported labels:</span> Name · Passport · Nationality · Phone · Check in/out · Villa · Price · Monthly · Deposit · Owner · Agent · PIC · Email</p>
+                    <p>💡 Works with casual messages too — just paste and try!</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
 
           {/* ── SECTION: Villa / Property Details ── */}
           <section className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100">
