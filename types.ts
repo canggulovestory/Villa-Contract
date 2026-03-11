@@ -4,6 +4,9 @@ export type CopyType = 'CLIENT' | 'OWNER' | 'AGENT';
 export type CommissionType = 'percent_total' | 'percent_monthly' | 'fixed';
 export type PaymentCurrency = 'IDR' | 'USD' | 'EUR' | 'USDT';
 
+/** Generic change handler type used by all section sub-components */
+export type HandleChange = <K extends keyof ContractData>(field: K, value: ContractData[K]) => void;
+
 export interface Guest {
   id: string;            // unique internal key for React lists
   name: string;

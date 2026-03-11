@@ -3,6 +3,26 @@
 
 export const SECURITY_DEPOSIT_RATE = 0.10; // 10% — change in one place
 
+export type PaymentCurrency = 'IDR' | 'USD' | 'EUR' | 'USDT';
+
+export const CURRENCY_SYMBOLS: Record<PaymentCurrency, string> = {
+  IDR: 'Rp', USD: '$', EUR: '€', USDT: 'USDT',
+};
+
+/** Format a number for display based on selected currency */
+export const formatCurrencyDisplay = (n: number, currency: PaymentCurrency): string => {
+  if (currency === 'IDR') return formatIDR(n);
+  const sym = CURRENCY_SYMBOLS[currency] ?? currency;
+  return `${sym} ${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+};
+
+/** Parse an IDR-formatted string (e.g. "30.000.000" or "30,000,000") into a number */
+export const parseIDRInput = (s: string): number => {
+  const cleaned = s.replace(/\./g, '').replace(/,/g, '').replace(/[^0-9]/g, '');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+};
+
 export const formatIDR = (value: number): string => {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
