@@ -32,7 +32,9 @@ export const Section1Villa: React.FC<Props> = ({ data, handleInputChange, onVill
             {sheetVillas.length > 0 && (
               <optgroup label="📋 Live from Google Sheets">
                 {sheetVillas.map(v => (
-                  <option key={v.name} value={v.name}>{v.name}</option>
+                  <option key={v.name} value={v.name}>
+                    {v.propertyCode ? `${v.propertyCode} – ${v.name}` : v.name}
+                  </option>
                 ))}
               </optgroup>
             )}
