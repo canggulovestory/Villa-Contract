@@ -141,7 +141,7 @@ const App: React.FC = () => {
   const [customWeeks, setCustomWeeks]               = useState<string>('2');
   const [savedOwners, setSavedOwners]             = useState<LessorData[]>([]);
   const [savedAgents, setSavedAgents]             = useState<AgentData[]>([]);
-  const isPriceManuallySet                        = useRef(false);
+  const [isPriceManuallySet, setIsPriceManuallySet] = useState(false);
   const [guestPassportFiles, setGuestPassportFiles] = useState<(File | null)[]>([null]);
   const [dealFolderLink, setDealFolderLink]         = useState<string>('');
   const [agentIdFile, setAgentIdFile]               = useState<File | null>(null);
@@ -191,7 +191,7 @@ const App: React.FC = () => {
 
   // ─── Total price auto-calc ────────────────────────────────────────────────
   useEffect(() => {
-    if (isPriceManuallySet.current) return;
+    if (isPriceManuallySet) return;
     if (computedData.numberOfNights > 0 && data.monthlyPrice > 0) {
       setData(prev => ({ ...prev, totalPrice: Math.round((data.monthlyPrice / 30) * computedData.numberOfNights) }));
     }
@@ -202,12 +202,20 @@ const App: React.FC = () => {
     const base = data.commissionType === 'percent_monthly' ? data.monthlyPrice : data.totalPrice;
 
     if (data.commissionSource === 'split_agent') {
-      // Step 1: auto-calc agent's total commission amount
-      if (data.commissionType !== 'fixed' && data.agentCommissionPercent > 0 && base > 0) {
-        const agentAmt = Math.round(base * data.agentCommissionPercent / 100);
-        // Step 2: TVM's share = agent amount × TVM split %
-        const tvmAmt = data.tvmSplitPercent > 0 ? Math.round(agentAmt * data.tvmSplitPercent / 100) : 0;
-        setData(prev => ({ ...prev, agentCommissionAmount: agentAmt, commissionAmount: tvmAmt }));
+      if (data.commissionType === 'fixed') {
+        // Fixed mode: agentCommissionAmount is entered manually;
+        // auto-calculate our share from tvmSplitPercent
+        if (data.agentCommissionAmount > 0 && data.tvmSplitPercent > 0) {
+          const ourAmt = Math.round(data.agentCommissionAmount * data.tvmSplitPercent / 100);
+          setData(prev => ({ ...prev, commissionAmount: ourAmt }));
+        }
+      } else {
+        // Percent mode: derive agent total from percent, then our share
+        if (data.agentCommissionPercent > 0 && base > 0) {
+          const agentAmt = Math.round(base * data.agentCommissionPercent / 100);
+          const ourAmt   = data.tvmSplitPercent > 0 ? Math.round(agentAmt * data.tvmSplitPercent / 100) : 0;
+          setData(prev => ({ ...prev, agentCommissionAmount: agentAmt, commissionAmount: ourAmt }));
+        }
       }
       return;
     }
@@ -219,22 +227,22 @@ const App: React.FC = () => {
     }
   }, [
     data.commissionSource, data.commissionType,
-    data.commissionPercent, data.agentCommissionPercent, data.tvmSplitPercent,
-    data.totalPrice, data.monthlyPrice,
+    data.commissionPercent, data.agentCommissionPercent, data.agentCommissionAmount,
+    data.tvmSplitPercent, data.totalPrice, data.monthlyPrice,
   ]);
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
   const handleInputChange = <K extends keyof ContractData>(field: K, value: ContractData[K]) => {
     setData(prev => ({ ...prev, [field]: value }));
     if (field === 'monthlyPrice' || field === 'checkInDate' || field === 'checkOutDate') {
-      isPriceManuallySet.current = false;
+      setIsPriceManuallySet(false);
     }
     if (field === 'checkInDate' || field === 'checkOutDate') {
       setActiveDurationPill(''); // clear pill highlight on manual date change
     }
   };
   const handleTotalPriceChange = (value: number) => {
-    isPriceManuallySet.current = true;
+    setIsPriceManuallySet(true);
     setData(prev => ({ ...prev, totalPrice: value }));
   };
   const handleLessorChange = (field: keyof LessorData, value: string | boolean) => {
@@ -345,10 +353,10 @@ const App: React.FC = () => {
     setData(prev => {
       const next = { ...prev };
       if (parsed.villaName)    { next.villaName    = parsed.villaName;   filled++; }
-      if (parsed.checkInDate)  { next.checkInDate  = parsed.checkInDate; filled++; isPriceManuallySet.current = false; }
-      if (parsed.checkOutDate) { next.checkOutDate = parsed.checkOutDate; filled++; isPriceManuallySet.current = false; }
-      if (parsed.monthlyPrice) { next.monthlyPrice = parsed.monthlyPrice; filled++; isPriceManuallySet.current = false; }
-      if (parsed.totalPrice)   { next.totalPrice   = parsed.totalPrice;  filled++; isPriceManuallySet.current = true; }
+      if (parsed.checkInDate)  { next.checkInDate  = parsed.checkInDate; filled++; setIsPriceManuallySet(false); }
+      if (parsed.checkOutDate) { next.checkOutDate = parsed.checkOutDate; filled++; setIsPriceManuallySet(false); }
+      if (parsed.monthlyPrice) { next.monthlyPrice = parsed.monthlyPrice; filled++; setIsPriceManuallySet(false); }
+      if (parsed.totalPrice)   { next.totalPrice   = parsed.totalPrice;  filled++; setIsPriceManuallySet(true); }
       if (parsed.name || parsed.passport || parsed.nationality || parsed.phone) {
         const guest = { ...next.guests[0] };
         if (parsed.name)        { guest.name          = parsed.name;       filled++; }
@@ -463,7 +471,7 @@ const App: React.FC = () => {
     if (months > 0) d.setMonth(d.getMonth() + months);
     if (days   > 0) d.setDate(d.getDate() + days);
     handleInputChange('checkOutDate', d.toISOString().split('T')[0]);
-    isPriceManuallySet.current = false;
+    setIsPriceManuallySet(false);
   };
   const handleDurationPill = (label: string, months: number, days: number) => {
     applyDuration(months, days);
@@ -690,31 +698,33 @@ const App: React.FC = () => {
                   }
                 />
                 <div className="px-4 sm:px-6 py-5 space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="sm:col-span-2">
+                  {/* Row 1: Villa Name | Bedrooms | Property Code */}
+                  <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                    <div className="sm:col-span-3">
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">Villa Name <span className="text-red-400">*</span></label>
                       <input type="text" value={data.villaName} onChange={e => handleInputChange('villaName', e.target.value)}
                         className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"
                         placeholder="e.g. Villa Sentosa" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Property Code</label>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Bedrooms <span className="text-red-400">*</span></label>
+                      <input type="number" min={1} value={data.bedrooms}
+                        onChange={e => handleInputChange('bedrooms', parseInt(e.target.value) || 1)}
+                        className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition text-center font-bold" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Code</label>
                       <input type="text" value={data.propertyCode} onChange={e => handleInputChange('propertyCode', e.target.value)}
                         className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"
-                        placeholder="e.g. VS-001" />
+                        placeholder="VS-001" />
                     </div>
                   </div>
+                  {/* Row 2: Villa Address */}
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Villa Address <span className="text-red-400">*</span></label>
                     <input type="text" value={data.villaAddress} onChange={e => handleInputChange('villaAddress', e.target.value)}
                       className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"
                       placeholder="e.g. Jalan Raya Canggu No. 12, Bali" />
-                  </div>
-                  <div className="w-36">
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Bedrooms <span className="text-red-400">*</span></label>
-                    <input type="number" min={1} value={data.bedrooms}
-                      onChange={e => handleInputChange('bedrooms', parseInt(e.target.value) || 1)}
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition text-center font-bold" />
                   </div>
                 </div>
               </section>
@@ -778,17 +788,38 @@ const App: React.FC = () => {
                 <SectionHeader num={3} icon={<Calendar className="w-4 h-4 text-emerald-600" />} title="Stay Details" />
                 <div className="px-4 sm:px-6 py-5 space-y-4">
 
-                  {/* 1 — Check-in Date (first, so user sets it before clicking a pill) */}
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Check-in Date <span className="text-red-400">*</span></label>
-                    <input type="date" value={data.checkInDate} onChange={e => handleInputChange('checkInDate', e.target.value)}
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition" />
+                  {/* Check-in / Check-out — side by side */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Check-in <span className="text-red-400">*</span></label>
+                      <input type="date" value={data.checkInDate} onChange={e => handleInputChange('checkInDate', e.target.value)}
+                        className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Check-out <span className="text-red-400">*</span></label>
+                      <input type="date" value={data.checkOutDate} onChange={e => handleInputChange('checkOutDate', e.target.value)}
+                        className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition" />
+                    </div>
                   </div>
 
-                  {/* 2 — Quick Duration Pills */}
+                  {/* Duration — compact inline badge */}
+                  {computedData.numberOfNights > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1.5 rounded-full border border-emerald-200">
+                        🌙 {computedData.numberOfNights} nights
+                      </span>
+                      {computedData.numberOfMonths >= 1 && (
+                        <span className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1.5 rounded-full border border-emerald-200">
+                          📅 {computedData.numberOfMonths} months
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Quick Duration Pills */}
                   <div>
                     <p className="text-xs font-semibold text-slate-500 mb-2 flex items-center gap-1.5">
-                      <span>🗓</span> Quick Duration
+                      <span>⚡</span> Quick Duration
                       {!data.checkInDate && <span className="text-amber-500 font-normal ml-1">— set check-in first</span>}
                     </p>
                     <div className="flex flex-wrap gap-2">
@@ -804,7 +835,6 @@ const App: React.FC = () => {
                           {label}
                         </button>
                       ))}
-                      {/* Other — custom weeks */}
                       <button type="button"
                         onClick={() => setActiveDurationPill(activeDurationPill === 'Other' ? '' : 'Other')}
                         disabled={!data.checkInDate}
@@ -816,58 +846,19 @@ const App: React.FC = () => {
                         Other…
                       </button>
                     </div>
-
-                    {/* Custom weeks input — shown when Other is selected */}
                     {activeDurationPill === 'Other' && (
-                      <div className="mt-3 flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
-                        <span className="text-xs font-semibold text-emerald-700 flex-shrink-0">Number of weeks:</span>
-                        <input
-                          type="number" min={1} max={52}
-                          value={customWeeks}
-                          onChange={e => {
-                            setCustomWeeks(e.target.value);
-                            handleApplyCustomWeeks(e.target.value);
-                          }}
-                          className="w-16 px-2 py-1 border-2 border-emerald-300 rounded-lg text-sm font-bold text-emerald-900 text-center outline-none focus:border-emerald-500 transition bg-white"
-                        />
-                        <span className="text-xs font-semibold text-emerald-700">weeks</span>
+                      <div className="mt-2 flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                        <span className="text-xs font-semibold text-emerald-700 flex-shrink-0">Weeks:</span>
+                        <input type="number" min={1} max={52} value={customWeeks}
+                          onChange={e => { setCustomWeeks(e.target.value); handleApplyCustomWeeks(e.target.value); }}
+                          className="w-14 px-2 py-1 border-2 border-emerald-300 rounded-lg text-sm font-bold text-emerald-900 text-center outline-none focus:border-emerald-500 transition bg-white" />
                         {data.checkOutDate && (
-                          <span className="text-xs text-emerald-600 ml-1">
+                          <span className="text-xs text-emerald-600">
                             → {new Date(data.checkOutDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                           </span>
                         )}
                       </div>
                     )}
-                  </div>
-
-                  {/* 3 — Check-out Date */}
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Check-out Date <span className="text-red-400">*</span></label>
-                    <input type="date" value={data.checkOutDate} onChange={e => handleInputChange('checkOutDate', e.target.value)}
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition" />
-                  </div>
-
-                  {/* 4 — Duration summary */}
-                  <div className={`rounded-xl overflow-hidden border transition-all ${computedData.numberOfNights > 0 ? 'border-emerald-200' : 'border-slate-100'}`}>
-                    <div className={`px-4 py-2 border-b ${computedData.numberOfNights > 0 ? 'bg-emerald-600/10 border-emerald-200' : 'bg-slate-50 border-slate-100'}`}>
-                      <span className="text-xs font-bold uppercase tracking-widest text-emerald-700">Duration</span>
-                    </div>
-                    <div className={`px-4 py-3 flex items-center gap-6 ${computedData.numberOfNights > 0 ? 'bg-emerald-50' : 'bg-slate-50'}`}>
-                      <div className="text-center">
-                        <span className="block text-2xl font-bold text-emerald-800">{computedData.numberOfNights}</span>
-                        <span className="text-xs text-emerald-600 font-semibold uppercase tracking-wide">Nights</span>
-                      </div>
-                      {/* Only show months when ≥ 1 — "0.2 months" is misleading for short stays */}
-                      {computedData.numberOfMonths >= 1 && (
-                        <>
-                          <div className="w-px h-10 bg-emerald-200" />
-                          <div className="text-center">
-                            <span className="block text-2xl font-bold text-emerald-800">{computedData.numberOfMonths}</span>
-                            <span className="text-xs text-emerald-600 font-semibold uppercase tracking-wide">Months</span>
-                          </div>
-                        </>
-                      )}
-                    </div>
                   </div>
 
                 </div>
@@ -905,12 +896,12 @@ const App: React.FC = () => {
                       {isIDR ? (
                         <input type="text" inputMode="numeric"
                           value={data.monthlyPrice > 0 ? data.monthlyPrice.toLocaleString('id-ID') : ''}
-                          onChange={e => { isPriceManuallySet.current = false; handleInputChange('monthlyPrice', parseIDRInput(e.target.value)); }}
+                          onChange={e => { setIsPriceManuallySet(false); handleInputChange('monthlyPrice', parseIDRInput(e.target.value)); }}
                           className="flex-1 px-3 py-2.5 text-sm font-mono outline-none focus:bg-blue-50/30 transition"
                           placeholder="e.g. 30.000.000" />
                       ) : (
                         <input type="number" value={data.monthlyPrice || ''}
-                          onChange={e => { isPriceManuallySet.current = false; handleInputChange('monthlyPrice', parseFloat(e.target.value) || 0); }}
+                          onChange={e => { setIsPriceManuallySet(false); handleInputChange('monthlyPrice', parseFloat(e.target.value) || 0); }}
                           className="flex-1 px-3 py-2.5 text-sm font-mono outline-none focus:bg-blue-50/30 transition"
                           placeholder="e.g. 3000" />
                       )}
@@ -940,7 +931,7 @@ const App: React.FC = () => {
                         )}
                       </div>
                       {data.totalPrice > 0 && <p className="text-xs text-slate-500 mt-1 font-semibold">{formatCurrencyDisplay(data.totalPrice)}</p>}
-                      {isPriceManuallySet.current && <p className="text-xs text-amber-600 mt-1">⚠ Manual override active</p>}
+                      {isPriceManuallySet && <p className="text-xs text-amber-600 mt-1">⚠ Manual override active</p>}
                     </div>
                     {/* Security Deposit — editable with Reset to 10% */}
                     <div>
@@ -1174,11 +1165,16 @@ const App: React.FC = () => {
                               </div>
                             </div>
                             <div>
-                              <label className="block text-xs font-semibold text-slate-600 mb-1">We Receive — auto</label>
-                              <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden bg-slate-50">
+                              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                                We Receive{data.commissionType !== 'fixed' && <span className="text-slate-400 font-normal"> — auto</span>}
+                              </label>
+                              <div className={`flex items-center border rounded-xl overflow-hidden ${data.commissionType === 'fixed' ? 'border-slate-300' : 'bg-slate-50 border-slate-200'}`}>
                                 <span className="px-2 py-2 text-slate-500 font-bold text-xs bg-slate-100 border-r border-slate-200">{currencySymbol}</span>
-                                <input type="number" readOnly value={data.commissionAmount || ''}
-                                  className="flex-1 px-3 py-2 text-sm font-mono outline-none bg-slate-50 text-slate-500"
+                                <input type="number" min={0}
+                                  readOnly={data.commissionType !== 'fixed'}
+                                  value={data.commissionAmount || ''}
+                                  onChange={e => data.commissionType === 'fixed' ? handleInputChange('commissionAmount', parseFloat(e.target.value) || 0) : undefined}
+                                  className={`flex-1 px-3 py-2 text-sm font-mono outline-none ${data.commissionType !== 'fixed' ? 'bg-slate-50 text-slate-400' : ''}`}
                                   placeholder="0" />
                               </div>
                             </div>
@@ -1248,12 +1244,16 @@ const App: React.FC = () => {
                       );
                     })}
                   </div>
-                  <div className="mt-4">
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Other Inclusions</label>
-                    <input type="text" value={data.otherInclusions}
+                  {/* Other Inclusions — full-width, same pill style */}
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-dashed border-slate-200 bg-white hover:border-emerald-300 transition-all">
+                    <span className="text-base flex-shrink-0">✏️</span>
+                    <input
+                      type="text"
+                      value={data.otherInclusions}
                       onChange={e => handleInputChange('otherInclusions', e.target.value)}
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"
-                      placeholder="e.g. Gardening, Water heater, Daily breakfast…" />
+                      className="flex-1 text-sm font-medium bg-transparent outline-none placeholder-slate-400 text-slate-700"
+                      placeholder="Other inclusions — e.g. Gardening, Water heater, Daily breakfast…"
+                    />
                   </div>
                 </div>
               </section>
@@ -1701,27 +1701,9 @@ const App: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Bank Details Reference */}
-                    <div className="bg-emerald-800/20 border border-emerald-600/40 rounded-xl p-3.5 space-y-1.5">
-                      <p className="text-xs font-bold uppercase tracking-widest text-emerald-300 mb-2">Payment To</p>
-                      <p className="text-xs font-bold text-white">PT THE VILLA MANAGERS</p>
-                      <p className="text-xs text-emerald-300">BANK CIMB NIAGA · Denpasar</p>
-                      <div className="border-t border-emerald-700/50 pt-2 space-y-1">
-                        <p className="text-xs text-emerald-200"><span className="text-emerald-400 font-semibold">IDR:</span> 800206006300</p>
-                        <p className="text-xs text-emerald-200"><span className="text-emerald-400 font-semibold">AUD:</span> 800206009950</p>
-                        <p className="text-xs text-emerald-200"><span className="text-emerald-400 font-semibold">EUR:</span> 800206008730</p>
-                        <p className="text-xs text-emerald-200"><span className="text-emerald-400 font-semibold">SWIFT:</span> BNIAIDJA</p>
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-emerald-400 text-center pt-1">
-                      Template: Lease Agreement 3rd party · IDR
-                    </p>
                   </div>
                 </div>
 
-            {/* Template Guide */}
-            <TemplateGuide />
 
           </div>
         </main>
