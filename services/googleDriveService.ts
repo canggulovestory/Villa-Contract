@@ -7,7 +7,8 @@
 
 const CLIENT_ID       = '507384430794-f2699okdpdv912dbtsvhs702khbchcn5.apps.googleusercontent.com';
 const API_KEY         = 'AIzaSyALPN_RpFprlabHCHpP4VVF8IsyzzxiWaM';
-const TEMPLATE_FILE_ID = '1FaI-tBUkg2a8HBB4mGNoJ87z7p9AOX8x';
+const TEMPLATE_FILE_ID        = '1FaI-tBUkg2a8HBB4mGNoJ87z7p9AOX8x';  // 3rd Party / Agent contract
+const DIRECT_TEMPLATE_FILE_ID = '1VNRv7DISC6kpEY-z3_1bUFaF5tVbaxOu';  // Direct / Guest contract
 const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
 const ROOT_FOLDER_NAME = 'Villa Contracts - TVM';
 
@@ -63,15 +64,18 @@ export const isSignedIn     = (): boolean       => accessToken !== null;
 export const getAccessToken = (): string | null => accessToken;
 
 // ─── Template Fetch ───────────────────────────────────────────────────────────
-export const fetchTemplateFromDrive = async (): Promise<ArrayBuffer> => {
+
+/** Fetch any Drive file (Google Doc → .docx export, or raw .docx download). */
+const fetchFileFromDrive = async (fileId: string): Promise<ArrayBuffer> => {
   if (!accessToken) throw new Error('Not signed in to Google');
 
-  const url =
+  // Try Google Doc export first; fall back to raw download for uploaded .docx files
+  const exportUrl =
     'https://www.googleapis.com/drive/v3/files/' +
-    TEMPLATE_FILE_ID +
+    fileId +
     '/export?mimeType=application%2Fvnd.openxmlformats-officedocument.wordprocessingml.document';
 
-  const res = await fetch(url, {
+  const res = await fetch(exportUrl, {
     headers: { Authorization: 'Bearer ' + accessToken },
   });
 
@@ -82,6 +86,14 @@ export const fetchTemplateFromDrive = async (): Promise<ArrayBuffer> => {
 
   return res.arrayBuffer();
 };
+
+/** Fetch the 3rd-Party / Agent contract template. */
+export const fetchTemplateFromDrive = (): Promise<ArrayBuffer> =>
+  fetchFileFromDrive(TEMPLATE_FILE_ID);
+
+/** Fetch the Direct / Guest lease agreement template. */
+export const fetchDirectTemplateFromDrive = (): Promise<ArrayBuffer> =>
+  fetchFileFromDrive(DIRECT_TEMPLATE_FILE_ID);
 
 // ─── Internal Helpers ─────────────────────────────────────────────────────────
 

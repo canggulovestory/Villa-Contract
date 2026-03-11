@@ -10,8 +10,8 @@ import { VILLA_TEMPLATES } from './data/villaTemplates';
 import { generateDocument, downloadContractLocally } from './services/docService';
 import {
   isSignedIn, signInToGoogle, signOutFromGoogle,
-  fetchTemplateFromDrive, saveContractToDrive,
-  saveDealToDrive, PassportFile,
+  fetchTemplateFromDrive, fetchDirectTemplateFromDrive,
+  saveContractToDrive, saveDealToDrive, PassportFile,
 } from './services/googleDriveService';
 import { TemplateGuide } from './components/TemplateGuide';
 import { PassportUploader } from './components/PassportUploader';
@@ -117,7 +117,8 @@ function parseRawText(raw: string) {
 const App: React.FC = () => {
   const [data, setData]                           = useState<ContractData>(INITIAL_DATA);
   const [localTemplateFile, setLocalTemplateFile] = useState<File | null>(null);
-  const [autoTemplate, setAutoTemplate]           = useState<ArrayBuffer | null>(null);
+  const [autoTemplate, setAutoTemplate]           = useState<ArrayBuffer | null>(null);       // 3rd Party template
+  const [autoDirectTemplate, setAutoDirectTemplate] = useState<ArrayBuffer | null>(null);    // Direct / Guest template
   const [templateBanner, setTemplateBanner]       = useState('');
   const [isGenerating, setIsGenerating]           = useState(false);
   const [formErrors, setFormErrors]               = useState<string[]>([]);
@@ -148,12 +149,16 @@ const App: React.FC = () => {
     } catch { /* ignore */ }
   }, []);
 
-  // ─── Auto-load template from Drive on connect ────────────────────────────
+  // ─── Auto-load BOTH templates from Drive on connect ─────────────────────
   useEffect(() => {
     if (!driveConnected) return;
     setTemplateBanner('loading');
-    fetchTemplateFromDrive()
-      .then(buf => { setAutoTemplate(buf); setTemplateBanner('loaded'); })
+    Promise.all([fetchTemplateFromDrive(), fetchDirectTemplateFromDrive()])
+      .then(([buf3p, bufDirect]) => {
+        setAutoTemplate(buf3p);
+        setAutoDirectTemplate(bufDirect);
+        setTemplateBanner('loaded');
+      })
       .catch(() => setTemplateBanner('failed'));
   }, [driveConnected]);
 
@@ -412,13 +417,19 @@ const App: React.FC = () => {
   };
   const handleDisconnectDrive = () => {
     signOutFromGoogle(); setDriveConnected(false); setDriveStatus('');
-    setSavedDriveLink(''); setAutoTemplate(null); setTemplateBanner('');
+    setSavedDriveLink(''); setAutoTemplate(null); setAutoDirectTemplate(null); setTemplateBanner('');
   };
+  /** Resolve the Direct / Guest lease template (for the "Download Contract" button). */
   const resolveTemplate = async (): Promise<File | ArrayBuffer | null> => {
-    if (autoTemplate) return autoTemplate;
+    if (autoDirectTemplate) return autoDirectTemplate;
     if (driveConnected) {
       setDriveStatus('Fetching template…');
-      try { const buf = await fetchTemplateFromDrive(); setDriveStatus('Template ready ✓'); return buf; }
+      try {
+        const buf = await fetchDirectTemplateFromDrive();
+        setAutoDirectTemplate(buf);
+        setDriveStatus('Template ready ✓');
+        return buf;
+      }
       catch (e: unknown) { setGenerateError(e instanceof Error ? e.message : 'Failed to fetch template.'); setDriveStatus(''); return null; }
     }
     if (localTemplateFile) return localTemplateFile;
@@ -550,7 +561,7 @@ const App: React.FC = () => {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-4">
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 flex items-center gap-2 text-sm text-emerald-700">
               <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-              <span><strong>Template auto-loaded</strong> — always uses latest version from Google Drive</span>
+              <span><strong>Both templates auto-loaded</strong> — Guest Contract &amp; 3rd Party Contract ready from Google Drive</span>
             </div>
           </div>
         )}
@@ -558,7 +569,7 @@ const App: React.FC = () => {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-4">
             <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 flex items-center gap-2 text-sm text-slate-500 animate-pulse">
               <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
-              Loading template from Google Drive…
+              Loading templates from Google Drive…
             </div>
           </div>
         )}
@@ -719,10 +730,16 @@ const App: React.FC = () => {
                             <div className="w-5 h-5 bg-emerald-400 rounded-full flex items-center justify-center flex-shrink-0">
                               <Check className="w-3 h-3 text-emerald-900" />
                             </div>
-                            <span className="text-sm font-bold">Lease Agreement Template</span>
+                            <span className="text-sm font-bold">Templates Connected</span>
                           </div>
-                          <p className="text-xs text-emerald-300 pl-7">
-                            {autoTemplate ? '✓ Auto-loaded from Drive' : 'via Google Drive · 3rd Party'}
+                          <p className="text-xs pl-7 flex items-center gap-1.5">
+                            <span className={autoDirectTemplate ? 'text-emerald-300' : 'text-yellow-300'}>
+                              {autoDirectTemplate ? '✓' : '⏳'} Guest Contract
+                            </span>
+                            <span className="text-emerald-600">·</span>
+                            <span className={autoTemplate ? 'text-emerald-300' : 'text-yellow-300'}>
+                              {autoTemplate ? '✓' : '⏳'} 3rd Party Contract
+                            </span>
                           </p>
                           <button onClick={handleDisconnectDrive}
                             className="pl-7 flex items-center gap-1 text-xs text-emerald-400 hover:text-red-300 transition">
@@ -736,7 +753,7 @@ const App: React.FC = () => {
                             <CloudUpload className="w-4 h-4" /> Connect Google Drive
                           </button>
                           <p className="text-xs text-emerald-300 text-center">
-                            Template auto-loads from Drive on connect
+                            Both templates auto-load from Drive on connect
                           </p>
                           <div className="border-t border-emerald-600/50 pt-3">
                             <p className="text-xs text-emerald-400 mb-2 font-semibold">Or upload manually:</p>
@@ -789,12 +806,14 @@ const App: React.FC = () => {
                     <div className="space-y-2">
                       <button onClick={handleDownload3rdParty}
                         disabled={isGenerating || (!driveConnected && !autoTemplate)}
+                        title={!driveConnected && !autoTemplate ? 'Connect Google Drive to use this template' : ''}
                         className="w-full py-3 bg-white hover:bg-emerald-50 disabled:bg-white/30 disabled:cursor-not-allowed text-emerald-800 disabled:text-emerald-600/40 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition shadow-sm active:scale-95">
                         <Zap className="w-4 h-4 text-yellow-500" />
                         {isGenerating ? 'Generating…' : '3rd Party Contract'}
                       </button>
                       <button onClick={handleDownload}
-                        disabled={isGenerating || (!driveConnected && !autoTemplate && !localTemplateFile)}
+                        disabled={isGenerating || (!driveConnected && !autoDirectTemplate && !localTemplateFile)}
+                        title={!driveConnected && !autoDirectTemplate && !localTemplateFile ? 'Connect Google Drive to use this template' : ''}
                         className="w-full py-3 bg-emerald-900 hover:bg-emerald-950 disabled:bg-emerald-900/50 disabled:cursor-not-allowed text-white disabled:text-white/40 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition shadow-md active:scale-95">
                         <FileDown className="w-4 h-4" />
                         {isGenerating ? 'Generating…' : 'Download Contract'}
