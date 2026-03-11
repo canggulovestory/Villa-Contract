@@ -67,7 +67,7 @@ export const Section2Guests: React.FC<Props> = ({
                   </label>
                   <input
                     type={type}
-                    value={(guest as Record<string, string>)[field] || ''}
+                    value={(guest as unknown as Record<string, string>)[field] || ''}
                     onChange={e => onUpdateGuest(index, field, e.target.value)}
                     placeholder={ph}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"

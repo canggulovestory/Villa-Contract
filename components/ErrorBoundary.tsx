@@ -16,10 +16,7 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false, errorMessage: '' };
-  }
+  state: State = { hasError: false, errorMessage: '' };
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, errorMessage: error.message };
