@@ -95,12 +95,40 @@ export const generateDocument = async (
   // ── 5. Agent / PIC tags
   const agent = data.agent;
   const agentData = {
-    agentPicName:  agent.enabled ? agent.picName  : '',
-    agentCompany:  agent.enabled ? agent.company  : '',
-    agentPosition: agent.enabled ? agent.position : '',
-    agentPhone:    agent.enabled ? agent.phone     : '',
-    agentEmail:    agent.enabled ? agent.email     : '',
-    hasAgent:      agent.enabled,
+    // Agent — Partnership Type
+    agentPartnershipType:  agent.enabled ? (agent.partnershipType === 'Others' ? agent.partnershipTypeOther : agent.partnershipType) : '',
+    // Agent — Company
+    agentCompany:       agent.enabled ? agent.company       : '',
+    agentOfficeAddress: agent.enabled ? agent.officeAddress : '',
+    agentOfficePhone:   agent.enabled ? agent.officePhone   : '',
+    agentPicName:       agent.enabled ? agent.picName       : '',
+    // Agent — PIC Personal Data
+    agentFullName:      agent.enabled ? agent.fullName      : '',
+    agentGender:        agent.enabled ? agent.gender        : '',
+    agentMaritalStatus: agent.enabled ? agent.maritalStatus : '',
+    agentBirthplace:    agent.enabled ? agent.birthplace    : '',
+    agentBirthday:      agent.enabled && agent.birthday ? formatDate(agent.birthday) : '',
+    agentNationality:   agent.enabled ? agent.nationality   : '',
+    agentIdNumber:      agent.enabled ? agent.idNumber      : '',
+    agentIdAddress:     agent.enabled ? agent.idAddress     : '',
+    agentCurrentAddress: agent.enabled ? agent.currentAddress : '',
+    agentPhone:         agent.enabled ? agent.phone         : '',
+    agentEmail:         agent.enabled ? agent.email         : '',
+    // Agent — Platforms (Yes/No flags)
+    agentFacebook:       agent.enabled && agent.platforms.facebook       ? 'Yes' : 'No',
+    agentInstagram:      agent.enabled && agent.platforms.instagram      ? 'Yes' : 'No',
+    agentTiktok:         agent.enabled && agent.platforms.tiktok         ? 'Yes' : 'No',
+    agentWebsite:        agent.enabled && agent.platforms.website        ? 'Yes' : 'No',
+    agentBookingCom:     agent.enabled && agent.platforms.bookingCom     ? 'Yes' : 'No',
+    agentAgoda:          agent.enabled && agent.platforms.agoda          ? 'Yes' : 'No',
+    agentTraveloka:      agent.enabled && agent.platforms.traveloka      ? 'Yes' : 'No',
+    agentTiketCom:       agent.enabled && agent.platforms.tiketCom       ? 'Yes' : 'No',
+    agentPersonalNetwork: agent.enabled && agent.platforms.personalNetwork ? 'Yes' : 'No',
+    // Agent — Bank Details
+    agentBankName:          agent.enabled ? agent.bankName          : '',
+    agentBankAccountHolder: agent.enabled ? agent.bankAccountHolder : '',
+    agentBankAccountNumber: agent.enabled ? agent.bankAccountNumber : '',
+    hasAgent: agent.enabled,
   };
 
   // ── 6. Commission calculation base label

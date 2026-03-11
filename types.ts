@@ -24,14 +24,55 @@ export interface LessorData {
   email: string;
 }
 
-// ─── Agent / PIC ──────────────────────────────────────────────────────────
+// ─── Agent / Partner ──────────────────────────────────────────────────────
+export type PartnershipType = 'Travel Agency' | 'Property Agent' | 'Freelance Agent' | 'OTA Partner' | 'Others' | '';
+
+export interface AgentPlatforms {
+  facebook:       boolean;
+  instagram:      boolean;
+  tiktok:         boolean;
+  website:        boolean;
+  bookingCom:     boolean;
+  agoda:          boolean;
+  traveloka:      boolean;
+  tiketCom:       boolean;
+  personalNetwork: boolean;
+  others:         boolean;
+}
+
 export interface AgentData {
   enabled: boolean;
-  picName: string;        // Person in Charge full name
-  company: string;        // defaults to PT The Villa Managers
-  position: string;       // e.g. Property Manager
-  phone: string;
-  email: string;
+
+  // A. Partnership Type
+  partnershipType:      PartnershipType;
+  partnershipTypeOther: string;   // free-text when "Others"
+
+  // B. Company Information
+  company:       string;
+  officeAddress: string;
+  officePhone:   string;
+  picName:       string;          // Agent PIC at company level
+
+  // C. PIC / Agent Personal Data
+  fullName:       string;         // Full name as per ID
+  gender:         'Male' | 'Female' | '';
+  maritalStatus:  'Single' | 'Married' | 'Divorced' | 'Widowed' | '';
+  birthplace:     string;
+  birthday:       string;         // ISO date
+  nationality:    string;
+  idNumber:       string;         // ID / Passport / Business Card No.
+  idAddress:      string;         // Address as per ID
+  currentAddress: string;         // Current address if different
+  phone:          string;
+  email:          string;
+
+  // D. Sales Platforms
+  platforms: AgentPlatforms;
+
+  // E. Bank Details (for commission payment)
+  bankName:          string;
+  bankAccountHolder: string;
+  bankAccountNumber: string;
 }
 
 export interface ContractData {
@@ -109,13 +150,35 @@ export const INITIAL_LESSOR: LessorData = {
   email: '',
 };
 
+export const INITIAL_AGENT_PLATFORMS: AgentPlatforms = {
+  facebook: false, instagram: false, tiktok: false, website: false,
+  bookingCom: false, agoda: false, traveloka: false, tiketCom: false,
+  personalNetwork: false, others: false,
+};
+
 export const INITIAL_AGENT: AgentData = {
   enabled: false,
+  partnershipType: '',
+  partnershipTypeOther: '',
+  company: '',
+  officeAddress: '',
+  officePhone: '',
   picName: '',
-  company: 'PT The Villa Managers',
-  position: 'Property Manager',
+  fullName: '',
+  gender: '',
+  maritalStatus: '',
+  birthplace: '',
+  birthday: '',
+  nationality: '',
+  idNumber: '',
+  idAddress: '',
+  currentAddress: '',
   phone: '',
   email: '',
+  platforms: { ...INITIAL_AGENT_PLATFORMS },
+  bankName: '',
+  bankAccountHolder: '',
+  bankAccountNumber: '',
 };
 
 export const INITIAL_DATA: ContractData = {

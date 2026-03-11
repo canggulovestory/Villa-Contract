@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ContractData, ComputedData, CopyType, CommissionType,
-  LessorData, AgentData,
+  LessorData, AgentData, AgentPlatforms, PartnershipType,
   INITIAL_DATA, INITIAL_LESSOR, INITIAL_AGENT,
   makeNewGuest,
 } from './types';
@@ -19,7 +19,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import {
   Calendar, CreditCard, ListTodo, FileDown, Home, Users, Plus, X,
   AlertCircle, CloudUpload, Link2, LogOut, ChevronDown, Check, Zap,
-  Trash2, Building2, UserCog, Save, FolderOpen,
+  Trash2, Building2, UserCog, Save, FolderOpen, Handshake,
 } from 'lucide-react';
 
 // ─── LocalStorage Keys ────────────────────────────────────────────────────────
@@ -144,6 +144,7 @@ const App: React.FC = () => {
   const isPriceManuallySet                        = useRef(false);
   const [guestPassportFiles, setGuestPassportFiles] = useState<(File | null)[]>([null]);
   const [dealFolderLink, setDealFolderLink]         = useState<string>('');
+  const [agentIdFile, setAgentIdFile]               = useState<File | null>(null);
 
   // ─── Load saved contacts from localStorage ───────────────────────────────
   useEffect(() => {
@@ -225,6 +226,15 @@ const App: React.FC = () => {
   const handleAgentChange = (field: keyof AgentData, value: string | boolean) => {
     setData(prev => ({ ...prev, agent: { ...prev.agent, [field]: value } }));
   };
+  const handleAgentPlatformChange = (platform: keyof AgentPlatforms) => {
+    setData(prev => ({
+      ...prev,
+      agent: {
+        ...prev.agent,
+        platforms: { ...prev.agent.platforms, [platform]: !prev.agent.platforms[platform] },
+      },
+    }));
+  };
   const handleVillaTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = e.target.value;
     if (selected === 'custom') {
@@ -284,17 +294,28 @@ const App: React.FC = () => {
     localStorage.setItem(LS_OWNERS, JSON.stringify(updated));
   };
   const saveAgent = () => {
-    if (!data.agent.picName.trim()) return;
+    const key = (data.agent.company || data.agent.fullName || data.agent.picName).trim();
+    if (!key) return;
     const contact: AgentData = { ...data.agent, enabled: true };
-    const updated = savedAgents.some(a => a.picName === contact.picName)
-      ? savedAgents.map(a => a.picName === contact.picName ? contact : a)
+    const updated = savedAgents.some(a =>
+        (a.company || a.fullName || a.picName) === key
+      )
+      ? savedAgents.map(a => (a.company || a.fullName || a.picName) === key ? contact : a)
       : [...savedAgents, contact];
     setSavedAgents(updated);
     localStorage.setItem(LS_AGENTS, JSON.stringify(updated));
   };
-  const loadAgent = (c: AgentData) => setData(prev => ({ ...prev, agent: { ...c, enabled: true } }));
-  const deleteAgent = (name: string) => {
-    const updated = savedAgents.filter(a => a.picName !== name);
+  const loadAgent = (c: AgentData) => setData(prev => ({
+    ...prev,
+    agent: {
+      ...INITIAL_AGENT,  // ensure all new fields exist if loaded from old localStorage
+      ...c,
+      enabled: true,
+      platforms: { ...INITIAL_AGENT.platforms, ...(c.platforms ?? {}) },
+    },
+  }));
+  const deleteAgent = (key: string) => {
+    const updated = savedAgents.filter(a => (a.company || a.fullName || a.picName) !== key);
     setSavedAgents(updated);
     localStorage.setItem(LS_AGENTS, JSON.stringify(updated));
   };
@@ -480,16 +501,22 @@ const App: React.FC = () => {
 
   const AgentChips = () => savedAgents.length > 0 ? (
     <div className="flex flex-wrap gap-2 mb-3">
-      {savedAgents.map(a => (
-        <div key={a.picName} className="flex items-center gap-1 bg-sky-50 border border-sky-200 rounded-full px-3 py-1">
-          <button onClick={() => loadAgent(a)} className="text-xs font-semibold text-sky-800 hover:text-sky-600">
-            {a.picName}
-          </button>
-          <button onClick={() => deleteAgent(a.picName)} className="text-sky-400 hover:text-red-500 transition ml-1">
-            <X size={11} />
-          </button>
-        </div>
-      ))}
+      {savedAgents.map(a => {
+        const key   = (a.company || a.fullName || a.picName) || 'Agent';
+        const label = a.company
+          ? `${a.company}${a.partnershipType ? ` · ${a.partnershipType}` : ''}`
+          : (a.fullName || a.picName || 'Agent');
+        return (
+          <div key={key} className="flex items-center gap-1 bg-purple-50 border border-purple-200 rounded-full px-3 py-1">
+            <button onClick={() => loadAgent(a)} className="text-xs font-semibold text-purple-800 hover:text-purple-600">
+              {label}
+            </button>
+            <button onClick={() => deleteAgent(key)} className="text-purple-400 hover:text-red-500 transition ml-1">
+              <X size={11} />
+            </button>
+          </div>
+        );
+      })}
     </div>
   ) : null;
 
@@ -1058,29 +1085,31 @@ const App: React.FC = () => {
                 )}
               </section>
 
-              {/* ── SECTION 7: Agent / PIC ── */}
+              {/* ── SECTION 7: Agent / Partner ── */}
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-sky-50/80 to-white flex items-center justify-between gap-3">
+                {/* Purple header */}
+                <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-purple-50/80 to-white flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <span className="w-7 h-7 bg-sky-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">7</span>
+                    <span className="w-7 h-7 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">7</span>
                     <div>
                       <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                        <UserCog className="w-4 h-4 text-sky-600" /> Agent / Person in Charge
+                        <Handshake className="w-4 h-4 text-purple-600" /> Agent / Partner
                       </h2>
-                      <p className="text-xs text-sky-600 mt-0.5">
-                        {data.agent.enabled ? 'Agent data enabled — will appear in contract' : 'Is there an agent or PIC for this deal? Enable to enter details.'}
+                      <p className="text-xs text-purple-600 mt-0.5">
+                        {data.agent.enabled ? 'Agent data enabled — will appear in contract' : 'This deal came through an agent? Enable to register them.'}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <Toggle checked={data.agent.enabled} onChange={() => handleAgentChange('enabled', !data.agent.enabled)} />
-                    <ChevronDown className={`w-4 h-4 text-sky-400 transition-transform ${data.agent.enabled ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`w-4 h-4 text-purple-400 transition-transform ${data.agent.enabled ? 'rotate-180' : ''}`} />
                   </div>
                 </div>
 
                 {data.agent.enabled && (
-                  <div className="px-6 py-5 space-y-4">
-                    {/* Saved contacts */}
+                  <div className="px-6 py-5 space-y-6">
+
+                    {/* 📂 Saved Agents */}
                     {savedAgents.length > 0 && (
                       <div>
                         <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
@@ -1090,33 +1119,214 @@ const App: React.FC = () => {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {[
-                        { field: 'picName' as const,  label: 'PIC Full Name',  req: true,  ph: 'Person in Charge' },
-                        { field: 'company' as const,  label: 'Company',        req: false, ph: 'PT The Villa Managers' },
-                        { field: 'position' as const, label: 'Position',       req: false, ph: 'Property Manager' },
-                        { field: 'phone' as const,    label: 'Phone',          req: false, ph: '+62 …' },
-                        { field: 'email' as const,    label: 'Email',          req: false, ph: 'agent@email.com' },
-                      ].map(({ field, label, req, ph }) => (
-                        <div key={field}>
-                          <label className="block text-xs font-semibold text-slate-600 mb-1">
-                            {label} {req && <span className="text-red-400">*</span>}
-                          </label>
-                          <input type="text" value={data.agent[field] as string}
-                            onChange={e => handleAgentChange(field, e.target.value)}
-                            placeholder={ph}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-sky-400 outline-none transition" />
-                        </div>
-                      ))}
+                    {/* 📷 ID / Business Card OCR upload */}
+                    <div>
+                      <p className="text-xs font-bold text-purple-700 uppercase tracking-widest mb-2">Scan ID / Business Card</p>
+                      <PassportUploader
+                        id="agent-id-upload"
+                        onScanComplete={(name, idNo, file) => {
+                          if (name) handleAgentChange('fullName', name);
+                          if (idNo) handleAgentChange('idNumber', idNo);
+                          if (file) setAgentIdFile(file);
+                        }}
+                      />
+                      {agentIdFile && (
+                        <p className="text-xs text-purple-600 mt-1.5 flex items-center gap-1">
+                          <Check className="w-3 h-3" /> {agentIdFile.name}
+                        </p>
+                      )}
                     </div>
 
-                    {/* Save button */}
-                    {data.agent.picName.trim() && (
+                    {/* A. Partnership Type */}
+                    <div>
+                      <p className="text-xs font-bold text-purple-700 uppercase tracking-widest mb-2">A. Partnership Type</p>
+                      <div className="flex flex-wrap gap-2">
+                        {(['Travel Agency', 'Property Agent', 'Freelance Agent', 'OTA Partner', 'Others'] as PartnershipType[]).map(type => (
+                          <button key={type} type="button"
+                            onClick={() => handleAgentChange('partnershipType', type)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-bold border-2 transition active:scale-95 ${
+                              data.agent.partnershipType === type
+                                ? 'bg-purple-600 border-purple-600 text-white shadow-sm'
+                                : 'bg-white border-purple-200 text-purple-700 hover:border-purple-500 hover:bg-purple-50'
+                            }`}>
+                            {type}
+                          </button>
+                        ))}
+                      </div>
+                      {data.agent.partnershipType === 'Others' && (
+                        <input type="text" value={data.agent.partnershipTypeOther}
+                          onChange={e => handleAgentChange('partnershipTypeOther', e.target.value)}
+                          placeholder="Describe partnership type…"
+                          className="mt-2 w-full px-3 py-2 border border-purple-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-400 outline-none transition" />
+                      )}
+                    </div>
+
+                    {/* B. Company Information */}
+                    <div>
+                      <p className="text-xs font-bold text-purple-700 uppercase tracking-widest mb-3">B. Company Information</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {[
+                          { field: 'company' as const,       label: 'Company Name',        ph: 'e.g. Bali Travel Co', full: false },
+                          { field: 'officePhone' as const,   label: 'Office Phone Number', ph: '+62 …',               full: false },
+                          { field: 'picName' as const,       label: 'Agent PIC',           ph: 'Person in Charge',    full: false },
+                        ].map(({ field, label, ph, full }) => (
+                          <div key={field} className={full ? 'sm:col-span-2' : ''}>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">{label}</label>
+                            <input type="text" value={data.agent[field] as string}
+                              onChange={e => handleAgentChange(field, e.target.value)}
+                              placeholder={ph}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-400 outline-none transition" />
+                          </div>
+                        ))}
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">Office Address</label>
+                          <input type="text" value={data.agent.officeAddress}
+                            onChange={e => handleAgentChange('officeAddress', e.target.value)}
+                            placeholder="Office address"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-400 outline-none transition" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* C. PIC Personal Data */}
+                    <div>
+                      <p className="text-xs font-bold text-purple-700 uppercase tracking-widest mb-3">C. PIC / Agent Personal Data</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Full name — full width */}
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">Full Name (as per ID)</label>
+                          <input type="text" value={data.agent.fullName}
+                            onChange={e => handleAgentChange('fullName', e.target.value)}
+                            placeholder="As written on ID / Passport"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-400 outline-none transition" />
+                        </div>
+                        {/* Gender */}
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">Gender</label>
+                          <select value={data.agent.gender} onChange={e => handleAgentChange('gender', e.target.value as 'Male' | 'Female' | '')}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-400 outline-none transition bg-white">
+                            <option value="">Select…</option>
+                            <option>Male</option>
+                            <option>Female</option>
+                          </select>
+                        </div>
+                        {/* Marital Status */}
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">Marital Status</label>
+                          <select value={data.agent.maritalStatus} onChange={e => handleAgentChange('maritalStatus', e.target.value as AgentData['maritalStatus'])}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-400 outline-none transition bg-white">
+                            <option value="">Select…</option>
+                            <option>Single</option>
+                            <option>Married</option>
+                            <option>Divorced</option>
+                            <option>Widowed</option>
+                          </select>
+                        </div>
+                        {/* Remaining personal fields */}
+                        {[
+                          { field: 'birthplace' as const,  label: 'Place of Birth',              type: 'text', ph: 'e.g. Jakarta' },
+                          { field: 'birthday' as const,    label: 'Date of Birth',               type: 'date', ph: '' },
+                          { field: 'nationality' as const, label: 'Nationality',                 type: 'text', ph: 'e.g. Indonesian' },
+                          { field: 'idNumber' as const,    label: 'ID / Passport / Biz Card No.', type: 'text', ph: '' },
+                          { field: 'phone' as const,       label: 'Active Phone / WhatsApp',     type: 'text', ph: '+62 …' },
+                          { field: 'email' as const,       label: 'Email Address',               type: 'email', ph: 'agent@email.com' },
+                        ].map(({ field, label, type, ph }) => (
+                          <div key={field}>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">{label}</label>
+                            <input type={type} value={data.agent[field] as string}
+                              onChange={e => handleAgentChange(field, e.target.value)}
+                              placeholder={ph}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-400 outline-none transition" />
+                          </div>
+                        ))}
+                        {/* ID Address — full width */}
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">Address (as per ID)</label>
+                          <input type="text" value={data.agent.idAddress}
+                            onChange={e => handleAgentChange('idAddress', e.target.value)}
+                            placeholder="Address as written on ID"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-400 outline-none transition" />
+                        </div>
+                        {/* Current address — full width */}
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">Current Address (if different)</label>
+                          <input type="text" value={data.agent.currentAddress}
+                            onChange={e => handleAgentChange('currentAddress', e.target.value)}
+                            placeholder="Leave blank if same as ID address"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-400 outline-none transition" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* D. Sales Platforms */}
+                    <div>
+                      <p className="text-xs font-bold text-purple-700 uppercase tracking-widest mb-3">D. Sales Platforms</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {([
+                          { key: 'facebook'        as const, label: '📘 Facebook'        },
+                          { key: 'instagram'       as const, label: '📸 Instagram'       },
+                          { key: 'tiktok'          as const, label: '🎵 TikTok'          },
+                          { key: 'website'         as const, label: '🌐 Website'         },
+                          { key: 'bookingCom'      as const, label: '🏨 Booking.com'     },
+                          { key: 'agoda'           as const, label: '🟠 Agoda'           },
+                          { key: 'traveloka'       as const, label: '✈️ Traveloka'       },
+                          { key: 'tiketCom'        as const, label: '🎫 Tiket.com'       },
+                          { key: 'personalNetwork' as const, label: '🤝 Personal Network'},
+                          { key: 'others'          as const, label: '➕ Others'          },
+                        ] as { key: keyof AgentPlatforms; label: string }[]).map(({ key, label }) => {
+                          const on = data.agent.platforms[key];
+                          return (
+                            <button key={key} type="button" onClick={() => handleAgentPlatformChange(key)}
+                              className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left text-xs font-semibold transition-all active:scale-95 ${
+                                on ? 'border-purple-500 bg-purple-50 text-purple-800' : 'border-slate-200 bg-white text-slate-600 hover:border-purple-200 hover:bg-purple-50/40'
+                              }`}>
+                              <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border transition ${on ? 'bg-purple-500 border-purple-500' : 'border-slate-300 bg-white'}`}>
+                                {on && <Check className="w-2.5 h-2.5 text-white" />}
+                              </span>
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* E. Bank Details */}
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                      <p className="text-xs font-bold text-purple-700 uppercase tracking-widest mb-3">E. Bank Details (for Commission Payment)</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {[
+                          { field: 'bankName' as const,          label: 'Bank Name',           ph: 'e.g. BCA' },
+                          { field: 'bankAccountHolder' as const,  label: 'Account Holder Name', ph: 'Full name' },
+                          { field: 'bankAccountNumber' as const,  label: 'Account Number',      ph: '1234567890' },
+                        ].map(({ field, label, ph }) => (
+                          <div key={field}>
+                            <label className="block text-xs font-semibold text-purple-700 mb-1">{label}</label>
+                            <input type="text" value={data.agent[field] as string}
+                              onChange={e => handleAgentChange(field, e.target.value)}
+                              placeholder={ph}
+                              className="w-full px-3 py-2 border border-purple-300 bg-white rounded-xl text-sm focus:ring-2 focus:ring-purple-400 outline-none transition" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* F. Supporting Document note */}
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 flex items-start gap-2.5">
+                      <span className="text-yellow-500 text-base flex-shrink-0 mt-0.5">📎</span>
+                      <p className="text-xs text-yellow-800">
+                        <strong>Supporting Document:</strong> Please attach PIC's ID photo (KTP/Passport) above —
+                        alternatively a <strong>Business Card</strong> or <strong>Company Profile</strong> is accepted.
+                      </p>
+                    </div>
+
+                    {/* 💾 Save Agent to Contacts */}
+                    {(data.agent.company || data.agent.fullName || data.agent.picName) && (
                       <button onClick={saveAgent}
-                        className="flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white text-xs font-bold rounded-xl transition active:scale-95">
-                        <Save className="w-3.5 h-3.5" /> Save to Contacts
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-xl transition active:scale-95">
+                        <Save className="w-4 h-4" /> Save Agent to Contacts
                       </button>
                     )}
+
                   </div>
                 )}
               </section>
