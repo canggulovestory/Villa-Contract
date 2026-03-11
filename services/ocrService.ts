@@ -1,6 +1,6 @@
 import Tesseract from 'tesseract.js';
 
-// âââ Types âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── Types ────────────────────────────────────────────────────────────────
 
 export interface OCRResult {
   text: string;
@@ -8,7 +8,7 @@ export interface OCRResult {
   extractedPassport?: string;
 }
 
-// âââ Constants ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── Constants ────────────────────────────────────────────────────────────
 
 const MAX_FILE_SIZE_MB = 5;
 
@@ -18,9 +18,9 @@ const MAX_FILE_SIZE_MB = 5;
 // (country codes, visa labels, etc.).
 const PASSPORT_REGEX = /\b[A-Z]{1,2}[0-9]{6,8}\b/;
 
-// âââ scanPassport âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── scanPassport ─────────────────────────────────────────────────────────
 // Runs Tesseract.js OCR on a passport image and extracts the number and name.
-// All processing is client-side â no data leaves the browser.
+// All processing is client-side — no data leaves the browser.
 //
 // Fixed:
 //  1. File size guard (5 MB max) to prevent browser hangs.
@@ -42,7 +42,7 @@ export const scanPassport = async (file: File): Promise<OCRResult> => {
   let result: Tesseract.RecognizeResult;
   try {
     result = await Tesseract.recognize(file, 'eng', {
-      // Fixed: logger removed â was logging every progress tick to console.
+      // Fixed: logger removed — was logging every progress tick to console.
       // Uncomment the line below during development if you need progress logs:
       // logger: (m) => console.log('[OCR]', m),
     });
@@ -57,7 +57,7 @@ export const scanPassport = async (file: File): Promise<OCRResult> => {
   let extractedPassport = '';
   let extractedName     = '';
 
-  // ââ Strategy 1: Parse the MRZ (Machine Readable Zone)
+  // ── Strategy 1: Parse the MRZ (Machine Readable Zone)
   // MRZ lines contain '<<' separators. Format example:
   //   P<USADOE<<JOHN<<<<<<<<<<<<<<<<<<<<<<<<<<<<
   //   A12345678USA7006072M2401014<<<<<<<<<<<<<<<6
@@ -83,15 +83,15 @@ export const scanPassport = async (file: File): Promise<OCRResult> => {
     }
   }
 
-  // ââ Strategy 2: Regex search for passport number if MRZ failed
+  // ── Strategy 2: Regex search for passport number if MRZ failed
   if (!extractedPassport) {
     const found = text.match(PASSPORT_REGEX);
     if (found) extractedPassport = found[0];
   }
 
-  // ââ Strategy 3: Name heuristic if MRZ failed
+  // ── Strategy 3: Name heuristic if MRZ failed
   // Fixed: old heuristic matched country names like "REPUBLIC OF INDONESIA".
-  // Now we require: all caps, no numbers, 2 â4 words, length 5â40 chars,
+  // Now we require: all caps, no numbers, 2–4 words, length 5–40 chars,
   // and exclude common non-name lines.
   const NON_NAME_KEYWORDS = [
     'PASSPORT', 'REPUBLIC', 'INDONESIA', 'UNITED', 'STATES', 'NATIONALITY',

@@ -5,8 +5,8 @@
 // Required: Load the GIS script in index.html:
 //   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '507384430794-f2699okdpdv912dbtsvhs702khbchcn5.apps.googleusercontent.com';
-const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || 'AIzaSyALPN_RpFprlabHCHpP4VVF8IsyzzxiWaM';
+const CLIENT_ID = '507384430794-f2699okdpdv912dbtsvhs702khbchcn5.apps.googleusercontent.com';
+const API_KEY   = 'AIzaSyALPN_RpFprlabHCHpP4VVF8IsyzzxiWaM';
 const TEMPLATE_FILE_ID = '1FaI-tBUkg2a8HBB4mGNoJ87z7p9AOX8x';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
 
@@ -22,7 +22,7 @@ export const initGoogleAuth = (): Promise<void> => {
         tokenClient = (google as any).accounts.oauth2.initTokenClient({
           client_id: CLIENT_ID,
           scope: SCOPES,
-          callback: () => { },
+          callback: () => {},
         });
         resolve();
       } else {
@@ -55,7 +55,7 @@ export const signInToGoogle = (): Promise<string> => {
 // Sign Out
 export const signOutFromGoogle = (): void => {
   if (accessToken && typeof google !== 'undefined') {
-    (google as any).accounts.oauth2.revoke(accessToken, () => { });
+    (google as any).accounts.oauth2.revoke(accessToken, () => {});
   }
   accessToken = null;
 };

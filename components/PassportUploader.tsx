@@ -2,21 +2,21 @@ import React, { useState } from 'react';
 import { Upload, ScanLine, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { scanPassport } from '../services/ocrService';
 
-// âââ Types ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── Types ────────────────────────────────────────────────────────────────
 
 interface PassportUploaderProps {
   onScanComplete: (name: string, passport: string) => void;
 }
 
-// âââ PassportUploader âââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── PassportUploader ─────────────────────────────────────────────────────
 // Allows users to upload a passport image. Runs Tesseract.js OCR in the
 // browser (no server needed) and calls onScanComplete with extracted data.
 //
 // Fixed:
-//  1. File size guard (5 MB) â prevents browser hangs on large phone photos.
-//  2. Accurate success/sarning states â""success" now only shows when data
+//  1. File size guard (5 MB) — prevents browser hangs on large phone photos.
+//  2. Accurate success/warning states — "success" now only shows when data
 //     was actually extracted; a warning is shown when OCR returned nothing.
-//  3. Cleaner error message â no longer dumps raw OCR text into the UI.
+//  3. Cleaner error message — no longer dumps raw OCR text into the UI.
 //  4. Accepts .heic in addition to JPG/PNG (common iPhone format).
 //  5. onScanComplete is only called with real data (no silent empty override).
 
@@ -46,7 +46,7 @@ export const PassportUploader: React.FC<PassportUploaderProps> = ({ onScanComple
         // Fixed: only mark as "success" when we actually found something
         setStatus('success');
       } else {
-        // Fixed: "partial" state gives accurate feedback â scan ran but
+        // Fixed: "partial" state gives accurate feedback — scan ran but
         // found nothing; user needs to fill in manually.
         setStatus('partial');
       }
@@ -86,7 +86,7 @@ export const PassportUploader: React.FC<PassportUploaderProps> = ({ onScanComple
             <Upload className="w-10 h-10 text-emerald-600" />
             <div className="text-emerald-900 font-medium">Click to Upload Passport (OCR)</div>
             <p className="text-sm text-emerald-600">
-  Supports JPG / PNG / HEIC Â· Max 5 MB Â· Auto-fills Name \&amp; Number
+              Supports JPG / PNG / HEIC · Max 5 MB · Auto-fills Name &amp; Number
             </p>
           </>
         )}
@@ -103,16 +103,16 @@ export const PassportUploader: React.FC<PassportUploaderProps> = ({ onScanComple
       {/* Full success */}
       {status === 'success' && !error && (
         <div className="mt-4 flex items-center justify-center gap-2 text-emerald-700 bg-white/50 p-2 rounded-lg text-sm">
-          <CheckCircle2 className="w.4 h-4" />
+          <CheckCircle2 className="w-4 h-4" />
           Scanned successfully! Please verify the fields below.
         </div>
       )}
 
-      {/* Fixed: partial state â scan ran but no data found */}
+      {/* Fixed: partial state — scan ran but no data found */}
       {status === 'partial' && !error && (
         <div className="mt-4 flex items-start gap-2 text-amber-700 bg-amber-50 p-3 rounded-lg text-sm text-left">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          Scan     complete but could not auto-detect fields. Please enter the name and
+          Scan complete but could not auto-detect fields. Please enter the name and
           passport number manually below.
         </div>
       )}
