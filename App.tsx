@@ -1,774 +1,420 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ContractData, ComputedData, INITIAL_DATA, makeNewGuest } from './types';
-import { SECURITY_DEPOSIT_RATE, formatIDR } from './utils/format';
+import React from 'react';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { TemplateGuide } from './components/TemplateGuide';
 import { VILLA_TEMPLATES } from './data/villaTemplates';
 import { generateDocument, downloadContractLocally } from './services/docService';
 import {
-  isSignedIn,
+  initGoogleAuth,
   signInToGoogle,
   signOutFromGoogle,
+  isSignedIn,
   fetchTemplateFromDrive,
   saveContractToDrive,
 } from './services/googleDriveService';
-import { TemplateGuide } from './components/TemplateGuide';
-import { PassportUploader } from './components/PassportUploader';
-import { Checkbox } from './components/Checkbox';
-import { ErrorBoundary } from './components/ErrorBoundary';
 import {
-  User, Calendar, CreditCard, ListTodo, FileDown,
-  Waves, Wifi, Zap, Shovel, Trash2, Home, Users, Plus, X, AlertCircle,
-  CloudUpload, Link2, LogOut,
-} from 'lucide-react';
+  ContractData,
+  ComputedData,
+  Guest,
+  makeNewGuest,
+  INITIAL_DATA,
+} from './types';
+import { formatIDR } from './utils/format';
+import { FileText, CloudUpload, Link2, LogOut, Download, Plus, Trash2 } from 'lucide-react';
 
-// ─── Constants ────────────────────────────────────────────────────────────
+const SECURITY_DEPOSIT_RATE = 0.10;
 
-const MAX_GUESTS = 4;
-const MIN_GUESTS = 1;
+const diffDays = (a: string, b: string): number => {
+  if (!a || !b) return 0;
+  return Math.max(0, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000));
+};
 
-// ─── Form Validation ──────────────────────────────────────────────────────
-// Returns a list of human-readable error messages. Empty = valid.
+const diffMonths = (a: string, b: string): number => {
+  if (!a || !b) return 0;
+  const d1 = new Date(a);
+  const d2 = new Date(b);
+  return Math.max(0, (d2.getFullYear() - d1.getFullYear()) * 12 + d2.getMonth() - d1.getMonth());
+};
 
-function validateForm(data: ContractData, computed: ComputedData): string[] {
-  const errors: string[] = [];
+const INCLUSION_LABELS: Record<string, string> = {
+  cleaning2x: 'Cleaning 2x/week',
+  pool2x: 'Pool cleaning 2x/week',
+  internet: 'Internet/WiFi',
+  banjarFee: 'Banjar fee',
+  rubbishFee: 'Rubbish collection fee',
+  laundry: 'Laundry service',
+  electricity: 'Electricity',
+};
 
-  if (!data.villaName.trim())    errors.push('Villa name is required.');
-  if (!data.villaAddress.trim()) errors.push('Villa address is required.');
-  if (data.bedrooms < 1)         errors.push('Bedrooms must be at least 1.');
-  if (!data.checkInDate)         errors.push('Check-in date is required.');
-  if (!data.checkOutDate)        errors.push('Check-out date is required.');
-  if (computed.numberOfNights <= 0)
-    errors.push('Check-out date must be after check-in date.');
-  if (data.monthlyPrice <= 0)    errors.push('Monthly price must be greater than 0.');
-  if (data.totalPrice <= 0)      errors.push('Total price must be greater than 0.');
+function App() {
+  const [selectedVillaName, setSelectedVillaName] = React.useState<string | null>(null);
+  const [guests, setGuests] = React.useState<Guest[]>([makeNewGuest(1)]);
+  const [checkInDate, setCheckInDate] = React.useState('');
+  const [checkOutDate, setCheckOutDate] = React.useState('');
+  const [paymentDueDate, setPaymentDueDate] = React.useState('');
+  const [totalPrice, setTotalPrice] = React.useState(0);
+  const [monthlyPrice, setMonthlyPrice] = React.useState(0);
+  const [inclusions, setInclusions] = React.useState(INITIAL_DATA.inclusions);
+  const [otherInclusions, setOtherInclusions] = React.useState('');
+  const [driveConnected, setDriveConnected] = React.useState(false);
+  const [driveStatus, setDriveStatus] = React.useState('');
+  const [savedDriveLink, setSavedDriveLink] = React.useState('');
+  const [localTemplateFile, setLocalTemplateFile] = React.useState<File | null>(null);
+  const [generating, setGenerating] = React.useState(false);
+  const [error, setError] = React.useState('');
 
-  data.guests.forEach((g, i) => {
-    const n = i + 1;
-    if (!g.name.trim())           errors.push(`Guest ${n}: Full name is required.`);
-    if (!g.passportNumber.trim()) errors.push(`Guest ${n}: Passport number is required.`);
-    if (!g.nationality.trim())    errors.push(`Guest ${n}: Nationality is required.`);
-  });
+  React.useEffect(() => {
+    initGoogleAuth().catch(() => {
+      console.warn('Google Identity Services not available yet');
+    });
+  }, []);
 
-  return errors;
-}
+  const selectedVillaData = VILLA_TEMPLATES.find((v) => v.name === selectedVillaName) || null;
+  const securityDeposit = Math.round(totalPrice * SECURITY_DEPOSIT_RATE);
+  const numberOfNights = diffDays(checkInDate, checkOutDate);
+  const numberOfMonths = diffMonths(checkInDate, checkOutDate);
 
-// ─── App ──────────────────────────────────────────────────────────────────
+  const addGuest = () => setGuests((prev) => [...prev, makeNewGuest(prev.length + 1)]);
+  const removeGuest = (id: string) =>
+    setGuests((prev) => (prev.length > 1 ? prev.filter((g) => g.id !== id) : prev));
+  const updateGuest = (id: string, field: keyof Guest, value: string) =>
+    setGuests((prev) => prev.map((g) => (g.id === id ? { ...g, [field]: value } : g)));
 
-const App: React.FC = () => {
-  const [data, setData]                       = useState<ContractData>(INITIAL_DATA);
-  const [localTemplateFile, setLocalTemplateFile] = useState<File | null>(null);
-  const [isGenerating, setIsGenerating]       = useState(false);
-  const [formErrors, setFormErrors]           = useState<string[]>([]);
-  const [generateError, setGenerateError]     = useState<string>('');
-  const [driveConnected, setDriveConnected]   = useState(isSignedIn());
-  const [driveStatus, setDriveStatus]         = useState<string>('');
-  const [savedDriveLink, setSavedDriveLink]   = useState<string>('');
-
-  // Fixed: track whether the user has manually set totalPrice so the
-  // auto-calculation effect doesn't silently wipe their override.
-  const isPriceManuallySet = useRef(false);
-
-  // ── Derived / Computed Values (never stored in state)
-  const computedData: ComputedData = useMemo(() => {
-    // 1. Nights & Months
-    let numberOfNights = 0;
-    if (data.checkInDate && data.checkOutDate) {
-      const start    = new Date(data.checkInDate);
-      const end      = new Date(data.checkOutDate);
-      const diffTime = end.getTime() - start.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      numberOfNights = diffDays > 0 ? diffDays : 0;
-    }
-    const numberOfMonths =
-      numberOfNights > 0 ? parseFloat((numberOfNights / 30).toFixed(2)) : 0;
-
-    // 2. Security Deposit (uses shared constant — easy to change in one place)
-    const securityDeposit = data.totalPrice * SECURITY_DEPOSIT_RATE;
-
-    // 3. Inclusions string (fallback to 'None' so the contract field is never blank)
-    const activeInclusions: string[] = [];
-    if (data.inclusions.cleaning2x) activeInclusions.push('Cleaning 2x per week');
-    if (data.inclusions.pool2x)     activeInclusions.push('Pool Maintenance 2x per week');
-    if (data.inclusions.internet)   activeInclusions.push('Internet');
-    if (data.inclusions.banjarFee)  activeInclusions.push('Banjar Fee');
-    if (data.inclusions.rubbishFee) activeInclusions.push('Rubbish Fee');
-    if (data.inclusions.laundry)    activeInclusions.push('Laundry Linen & Towels 1x');
-    if (data.inclusions.electricity)activeInclusions.push('Electricity');
-    if (data.otherInclusions.trim()) activeInclusions.push(data.otherInclusions.trim());
-    const inclusionsList = activeInclusions.length > 0 ? activeInclusions.join(', ') : 'None';
-
-    return { numberOfNights, numberOfMonths, securityDeposit, inclusionsList };
-  }, [data.checkInDate, data.checkOutDate, data.totalPrice, data.inclusions, data.otherInclusions]);
-
-  // ── Fixed: auto-calculate totalPrice only when the user hasn't manually
-  //    overridden it. The ref is reset whenever monthlyPrice or dates change
-  //    from user input, so a subsequent date/price change re-enables auto-calc.
-  useEffect(() => {
-    if (isPriceManuallySet.current) return;
-    if (computedData.numberOfNights > 0 && data.monthlyPrice > 0) {
-      const calculatedTotal = (data.monthlyPrice / 30) * computedData.numberOfNights;
-      setData((prev) => ({ ...prev, totalPrice: Math.round(calculatedTotal) }));
-    }
-  }, [data.monthlyPrice, computedData.numberOfNights]);
-
-  // ─── Handlers ─────────────────────────────────────────────────────────
-
-  const handleInputChange = <K extends keyof ContractData>(
-    field: K,
-    value: ContractData[K]
-  ) => {
-    // Fixed: strongly typed generic — no more `value: any`
-    setData((prev) => ({ ...prev, [field]: value }));
-    // When the user edits monthlyPrice or dates, re-enable auto-calc
-    if (field === 'monthlyPrice' || field === 'checkInDate' || field === 'checkOutDate') {
-      isPriceManuallySet.current = false;
-    }
-  };
-
-  const handleTotalPriceChange = (value: number) => {
-    // Fixed: separate handler for totalPrice so we know the user is overriding
-    isPriceManuallySet.current = true;
-    setData((prev) => ({ ...prev, totalPrice: value }));
-  };
-
-  const handleVillaTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selected = e.target.value;
-    if (selected === 'custom') {
-      setData((prev) => ({ ...prev, villaName: '', villaAddress: '', bedrooms: 1 }));
-    } else {
-      const template = VILLA_TEMPLATES.find((v) => v.name === selected);
-      if (template) {
-        setData((prev) => ({
-          ...prev,
-          villaName:    template.name,
-          villaAddress: template.address,
-          bedrooms:     template.bedrooms,
-        }));
-      }
-    }
-  };
-
-  const handleInclusionChange = (key: keyof ContractData['inclusions']) => {
-    setData((prev) => ({
-      ...prev,
-      inclusions: { ...prev.inclusions, [key]: !prev.inclusions[key] },
-    }));
-  };
-
-  const updateGuest = (
-    index: number,
-    field: keyof Omit<ReturnType<typeof makeNewGuest>, 'id'>,
-    value: string
-  ) => {
-    const newGuests = [...data.guests];
-    newGuests[index] = { ...newGuests[index], [field]: value };
-    setData((prev) => ({ ...prev, guests: newGuests }));
-  };
-
-  const addGuest = () => {
-    if (data.guests.length >= MAX_GUESTS) return;
-    setData((prev) => ({
-      ...prev,
-      guests: [...prev.guests, makeNewGuest(prev.guests.length + 1)],
-    }));
-  };
-
-  const removeGuest = (index: number) => {
-    if (data.guests.length <= MIN_GUESTS) return;
-    setData((prev) => ({
-      ...prev,
-      guests: prev.guests.filter((_, i) => i !== index),
-    }));
-  };
-
-  // Fixed: only apply passport scan results when they contain actual data
-  const handlePassportScan = (index: number, name: string, passport: string) => {
-    const newGuests = [...data.guests];
-    newGuests[index] = {
-      ...newGuests[index],
-      // Only overwrite if the OCR found something
-      ...(name     ? { name }           : {}),
-      ...(passport ? { passportNumber: passport } : {}),
-    };
-    setData((prev) => ({ ...prev, guests: newGuests }));
-  };
-
-  // ── Google Drive ─────────────────────────────────────────────────────
+  const toggleInclusion = (key: string) =>
+    setInclusions((prev) => ({ ...prev, [key]: !prev[key as keyof typeof prev] }));
 
   const handleConnectDrive = async () => {
-    setDriveStatus('Connecting…');
-    setGenerateError('');
     try {
+      setDriveStatus('Connecting...');
       await signInToGoogle();
       setDriveConnected(true);
-      setDriveStatus('Connected ✓');
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Google sign-in failed.';
-      setGenerateError(msg);
-      setDriveStatus('');
+      setDriveStatus('Connected to Google Drive');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Connection failed';
+      setDriveStatus(msg);
     }
   };
 
   const handleDisconnectDrive = () => {
     signOutFromGoogle();
     setDriveConnected(false);
-    setDriveStatus('');
+    setDriveStatus('Disconnected');
     setSavedDriveLink('');
   };
 
-  // ── Resolve the template source (Drive first, local fallback) ─────────
-  const resolveTemplate = async (): Promise<File | ArrayBuffer | null> => {
-    if (driveConnected) {
-      // Primary: fetch from Google Drive
-      setDriveStatus('Fetching template from Drive…');
-      try {
-        const buf = await fetchTemplateFromDrive();
-        setDriveStatus('Template ready ✓');
-        return buf;
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Failed to fetch template.';
-        setGenerateError(msg);
-        setDriveStatus('');
-        return null;
-      }
+  const resolveTemplate = async (): Promise<File | ArrayBuffer> => {
+    if (driveConnected && isSignedIn()) {
+      setDriveStatus('Fetching template from Drive...');
+      const buf = await fetchTemplateFromDrive();
+      setDriveStatus('Template loaded from Drive');
+      return buf;
     }
-    // Fallback: user-uploaded local file
     if (localTemplateFile) return localTemplateFile;
-    setFormErrors(['Please connect Google Drive or upload a .docx template.']);
-    return null;
+    throw new Error('No template available. Connect Google Drive or upload a local .docx template.');
   };
 
-  // ── Download contract locally ─────────────────────────────────────────
+  const buildInclusionsList = (): string => {
+    const active = Object.entries(inclusions)
+      .filter(([, v]) => v)
+      .map(([k]) => INCLUSION_LABELS[k] || k);
+    if (otherInclusions) active.push(otherInclusions);
+    return active.join(', ') || 'None';
+  };
+
+  const buildContractData = (): { data: ContractData; computed: ComputedData } => {
+    if (!selectedVillaData) throw new Error('Please select a villa first.');
+    if (!checkInDate || !checkOutDate) throw new Error('Please set check-in and check-out dates.');
+
+    const data: ContractData = {
+      villaName: selectedVillaData.name,
+      villaAddress: selectedVillaData.address,
+      bedrooms: selectedVillaData.bedrooms,
+      guests,
+      checkInDate,
+      checkOutDate,
+      monthlyPrice,
+      totalPrice,
+      paymentDueDate,
+      inclusions,
+      otherInclusions,
+    };
+
+    const computed: ComputedData = {
+      numberOfNights,
+      numberOfMonths,
+      securityDeposit,
+      inclusionsList: buildInclusionsList(),
+    };
+
+    return { data, computed };
+  };
+
   const handleDownload = async () => {
-    setFormErrors([]);
-    setGenerateError('');
-    setSavedDriveLink('');
-
-    const errors = validateForm(data, computedData);
-    if (errors.length > 0) {
-      setFormErrors(errors);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-
-    const templateSource = await resolveTemplate();
-    if (!templateSource) return;
-
-    setIsGenerating(true);
     try {
-      const { buffer, filename } = await generateDocument(templateSource, data, computedData);
-      downloadContractLocally(buffer, filename);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Unknown error generating document.';
-      setGenerateError(msg);
+      setGenerating(true);
+      setError('');
+      const template = await resolveTemplate();
+      const { data, computed } = buildContractData();
+      const result = await generateDocument(template, data, computed);
+      downloadContractLocally(result.buffer, result.filename);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to generate contract');
     } finally {
-      setIsGenerating(false);
+      setGenerating(false);
     }
   };
 
-  // ── Save contract to Google Drive ─────────────────────────────────────
   const handleSaveToDrive = async () => {
-    setFormErrors([]);
-    setGenerateError('');
-    setSavedDriveLink('');
-
-    if (!driveConnected) {
-      setGenerateError('Connect Google Drive first to use this option.');
-      return;
-    }
-
-    const errors = validateForm(data, computedData);
-    if (errors.length > 0) {
-      setFormErrors(errors);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-
-    setIsGenerating(true);
-    setDriveStatus('Generating & saving to Drive…');
     try {
-      const templateSource = await resolveTemplate();
-      if (!templateSource) return;
-
-      const { buffer, filename } = await generateDocument(templateSource, data, computedData);
-      const link = await saveContractToDrive(buffer, filename);
+      setGenerating(true);
+      setError('');
+      setSavedDriveLink('');
+      const template = await resolveTemplate();
+      const { data, computed } = buildContractData();
+      const result = await generateDocument(template, data, computed);
+      setDriveStatus('Uploading to Drive...');
+      const link = await saveContractToDrive(result.buffer, result.filename);
       setSavedDriveLink(link);
-      setDriveStatus('Saved to Drive ✓');
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Unknown error saving to Drive.';
-      setGenerateError(msg);
-      setDriveStatus('');
+      setDriveStatus('Saved to Google Drive!');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save to Drive');
+      setDriveStatus('Save failed');
     } finally {
-      setIsGenerating(false);
+      setGenerating(false);
     }
   };
-
-  // ─── Render ───────────────────────────────────────────────────────────
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-slate-50 text-slate-800 pb-20">
-
-        {/* Header */}
-        <header className="bg-emerald-900 text-white shadow-lg sticky top-0 z-50">
-          <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Home className="w-6 h-6 text-emerald-300" />
-              <h1 className="text-2xl font-bold tracking-wide">Villa Contract Generator 🌿</h1>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-emerald-50">
+        <header className="bg-white shadow-sm border-b border-emerald-100">
+          <div className="max-w-7xl mx-auto px-4 py-6">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-3">
+                <FileText className="w-8 h-8 text-emerald-600" />
+                <div>
+                  <h1 className="text-3xl font-bold text-emerald-900">Villa Contract Manager</h1>
+                  <p className="text-slate-600 mt-1">Create and manage villa rental contracts</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {driveConnected ? (
+                  <>
+                    <span className="text-sm text-emerald-600 flex items-center gap-1">
+                      <CloudUpload className="w-4 h-4" /> Drive Connected
+                    </span>
+                    <button onClick={handleDisconnectDrive}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50">
+                      <LogOut className="w-4 h-4" /> Disconnect
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={handleConnectDrive}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    <CloudUpload className="w-4 h-4" /> Connect Google Drive
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="text-xs text-emerald-200 font-mono hidden sm:block">v2.4.0</div>
+            {driveStatus && <p className="text-sm text-slate-500 mt-2">{driveStatus}</p>}
           </div>
         </header>
 
-        {/* Validation Errors Banner */}
-        {formErrors.length > 0 && (
-          <div className="max-w-5xl mx-auto px-6 mt-4">
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2 text-red-700 font-semibold">
-                <AlertCircle className="w-5 h-5" />
-                Please fix the following before generating:
+        <main className="max-w-7xl mx-auto px-4 py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100">
+                <h2 className="text-2xl font-bold text-emerald-900 mb-4">Select Villa</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {VILLA_TEMPLATES.map((villa) => (
+                    <div key={villa.name} onClick={() => setSelectedVillaName(villa.name)}
+                      className={'p-4 rounded-lg border-2 cursor-pointer transition-all ' +
+                        (selectedVillaName === villa.name
+                          ? 'border-emerald-600 bg-emerald-50'
+                          : 'border-emerald-200 hover:border-emerald-400')}>
+                      <h3 className="font-bold text-emerald-900">{villa.name}</h3>
+                      <p className="text-sm text-slate-600">{villa.address}</p>
+                      <p className="text-sm text-slate-500 mt-2">{villa.bedrooms} bedrooms</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <ul className="list-disc list-inside text-sm text-red-600 space-y-1">
-                {formErrors.map((e, i) => <li key={i}>{e}</li>)}
-              </ul>
-            </div>
-          </div>
-        )}
 
-        <main className="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {selectedVillaData && (
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100 space-y-6">
+                  <h2 className="text-2xl font-bold text-emerald-900">
+                    Contract Details - {selectedVillaData.name}
+                  </h2>
 
-          {/* ── Left Column: Form ── */}
-          <div className="lg:col-span-2 space-y-6">
-
-            {/* Section: Villa Details */}
-            <section className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100">
-              <h2 className="text-xl font-bold text-emerald-900 mb-4 flex items-center gap-2">
-                <Home className="w-5 h-5" /> Villa Details
-              </h2>
-
-              {/* Template Picker */}
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-slate-600 mb-1">
-                  Select a Saved Villa (optional)
-                </label>
-                <select
-                  onChange={handleVillaTemplateChange}
-                  className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500 outline-none transition"
-                  defaultValue=""
-                >
-                  <option value="" disabled>Choose a saved villa or fill in manually…</option>
-                  <option value="custom">✏ Custom / New Villa</option>
-                  <optgroup label="Saved Villas">
-                    {VILLA_TEMPLATES.map((v) => (
-                      <option key={v.name} value={v.name}>{v.name}</option>
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-lg font-semibold text-emerald-800">Guests</h3>
+                      <button onClick={addGuest}
+                        className="flex items-center gap-1 px-3 py-1.5 text-sm bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200">
+                        <Plus className="w-4 h-4" /> Add Guest
+                      </button>
+                    </div>
+                    {guests.map((guest, idx) => (
+                      <div key={guest.id} className="border border-slate-200 rounded-lg p-4 mb-3">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-medium text-slate-700">Guest {idx + 1}</span>
+                          {guests.length > 1 && (
+                            <button onClick={() => removeGuest(guest.id)} className="text-red-400 hover:text-red-600">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <input placeholder="Full Name" value={guest.name}
+                            onChange={(e) => updateGuest(guest.id, 'name', e.target.value)}
+                            className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                          <input placeholder="Passport Number" value={guest.passportNumber}
+                            onChange={(e) => updateGuest(guest.id, 'passportNumber', e.target.value)}
+                            className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                          <input placeholder="Nationality" value={guest.nationality}
+                            onChange={(e) => updateGuest(guest.id, 'nationality', e.target.value)}
+                            className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                          <input placeholder="Phone" value={guest.phone}
+                            onChange={(e) => updateGuest(guest.id, 'phone', e.target.value)}
+                            className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                          <input type="date" value={guest.birthday || ''}
+                            onChange={(e) => updateGuest(guest.id, 'birthday', e.target.value)}
+                            className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                        </div>
+                      </div>
                     ))}
-                  </optgroup>
-                </select>
-              </div>
+                  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-slate-600 mb-1">Villa Name</label>
-                  <input
-                    type="text"
-                    value={data.villaName}
-                    onChange={(e) => handleInputChange('villaName', e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500 outline-none transition"
-                    placeholder="e.g. Villa Sentosa"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-slate-600 mb-1">Address</label>
-                  <input
-                    type="text"
-                    value={data.villaAddress}
-                    onChange={(e) => handleInputChange('villaAddress', e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500 outline-none transition"
-                    placeholder="e.g. Jalan Raya Canggu No. 12"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1">Bedrooms</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={data.bedrooms}
-                    onChange={(e) =>
-                      // Fixed: fallback to 1 (not 0) when field is cleared
-                      handleInputChange('bedrooms', parseInt(e.target.value) || 1)
-                    }
-                    className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500 outline-none transition"
-                  />
-                </div>
-              </div>
-            </section>
-
-            {/* Section: Guests */}
-            <section className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-emerald-900 flex items-center gap-2">
-                  <Users className="w-5 h-5" /> Guests ({data.guests.length}/{MAX_GUESTS})
-                </h2>
-                {data.guests.length < MAX_GUESTS && (
-                  <button
-                    onClick={addGuest}
-                    className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-800 font-semibold transition"
-                  >
-                    <Plus className="w-4 h-4" /> Add Guest
-                  </button>
-                )}
-              </div>
-
-              <div className="space-y-6">
-                {data.guests.map((guest, index) => (
-                  <div key={guest.id} className="border border-emerald-100 rounded-xl p-4 bg-emerald-50/30">
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="text-sm font-bold text-emerald-700 uppercase tracking-wider">
-                        Guest {index + 1}
-                      </span>
-                      {index > 0 && (
-                        <button
-                          onClick={() => removeGuest(index)}
-                          className="text-slate-400 hover:text-red-500 transition"
-                          title="Remove guest"
-                        >
-                          <X size={16} />
-                        </button>
-                      )}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Check-in</label>
+                      <input type="date" value={checkInDate}
+                        onChange={(e) => setCheckInDate(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
-
-                    {/* OCR Passport Scanner */}
-                    <div className="mb-4">
-                      <PassportUploader
-                        onScanComplete={(name, passport) =>
-                          handlePassportScan(index, name, passport)
-                        }
-                      />
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Check-out</label>
+                      <input type="date" value={checkOutDate}
+                        onChange={(e) => setCheckOutDate(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Full Name *</label>
-                        <input
-                          type="text"
-                          value={guest.name}
-                          onChange={(e) => updateGuest(index, 'name', e.target.value)}
-                          className="w-full p-2 border border-slate-300 rounded text-sm focus:border-emerald-500 outline-none"
-                          placeholder="As on passport"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Passport No. *</label>
-                        <input
-                          type="text"
-                          value={guest.passportNumber}
-                          onChange={(e) => updateGuest(index, 'passportNumber', e.target.value)}
-                          className="w-full p-2 border border-slate-300 rounded text-sm focus:border-emerald-500 outline-none"
-                          placeholder="e.g. A1234567"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Nationality *</label>
-                        <input
-                          type="text"
-                          value={guest.nationality}
-                          onChange={(e) => updateGuest(index, 'nationality', e.target.value)}
-                          className="w-full p-2 border border-slate-300 rounded text-sm focus:border-emerald-500 outline-none"
-                          placeholder="e.g. Australian"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Phone</label>
-                        <input
-                          type="text"
-                          value={guest.phone}
-                          onChange={(e) => updateGuest(index, 'phone', e.target.value)}
-                          className="w-full p-2 border border-slate-300 rounded text-sm focus:border-emerald-500 outline-none"
-                          placeholder="+62 …"
-                        />
-                      </div>
-                      {/* Fixed: birthday field was in types/docService but missing from the form */}
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Date of Birth</label>
-                        <input
-                          type="date"
-                          value={guest.birthday}
-                          onChange={(e) => updateGuest(index, 'birthday', e.target.value)}
-                          className="w-full p-2 border border-slate-300 rounded text-sm focus:border-emerald-500 outline-none"
-                        />
-                      </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Payment Due</label>
+                      <input type="date" value={paymentDueDate}
+                        onChange={(e) => setPaymentDueDate(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
                   </div>
-                ))}
-              </div>
-            </section>
 
-            {/* Section: Stay Details */}
-            <section className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100">
-              <h2 className="text-xl font-bold text-emerald-900 mb-4 flex items-center gap-2">
-                <Calendar className="w-5 h-5" /> Stay Details
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1">Check-in Date *</label>
-                  <input
-                    type="date"
-                    value={data.checkInDate}
-                    onChange={(e) => handleInputChange('checkInDate', e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500 outline-none transition"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1">Check-out Date *</label>
-                  <input
-                    type="date"
-                    value={data.checkOutDate}
-                    onChange={(e) => handleInputChange('checkOutDate', e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500 outline-none transition"
-                  />
-                </div>
-              </div>
-              {computedData.numberOfNights > 0 && (
-                <div className="mt-4 p-4 bg-emerald-50 rounded-lg flex gap-8">
-                  <div>
-                    <span className="block text-xs text-emerald-600 uppercase">Duration</span>
-                    <span className="text-xl font-bold text-emerald-800">{computedData.numberOfNights} Nights</span>
-                  </div>
-                  <div>
-                    <span className="block text-xs text-emerald-600 uppercase">Months</span>
-                    <span className="text-xl font-bold text-emerald-800">{computedData.numberOfMonths}</span>
-                  </div>
-                </div>
-              )}
-            </section>
+                  {numberOfNights > 0 && (
+                    <p className="text-sm text-slate-600">{numberOfNights} nights / ~{numberOfMonths} months</p>
+                  )}
 
-            {/* Section: Financials */}
-            <section className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100">
-              <h2 className="text-xl font-bold text-emerald-900 mb-4 flex items-center gap-2">
-                <CreditCard className="w-5 h-5" /> Financials (IDR)
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                {/* Monthly Price */}
-                <div className="md:col-span-2 p-4 bg-blue-50 border border-blue-100 rounded-lg">
-                  <label className="block text-sm font-semibold text-blue-800 mb-1">
-                    Monthly Price (Rp) *
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-500 font-bold">Rp</span>
-                    <input
-                      type="number"
-                      value={data.monthlyPrice || ''}
-                      onChange={(e) =>
-                        handleInputChange('monthlyPrice', parseFloat(e.target.value) || 0)
-                      }
-                      className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none transition font-mono"
-                      placeholder="e.g. 30000000"
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Monthly Price (IDR)</label>
+                      <input type="number" value={monthlyPrice || ''}
+                        onChange={(e) => setMonthlyPrice(Number(e.target.value))}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Total Price (IDR)</label>
+                      <input type="number" value={totalPrice || ''}
+                        onChange={(e) => setTotalPrice(Number(e.target.value))}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
                   </div>
-                  <p className="text-xs text-blue-600 mt-1">
-                    Total price is auto-calculated from this. You can override total below.
-                  </p>
-                </div>
 
-                {/* Total Price */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1">
-                    Total Price (Rp) *
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-500 font-bold">Rp</span>
-                    <input
-                      type="number"
-                      value={data.totalPrice || ''}
-                      onChange={(e) =>
-                        // Fixed: separate handler marks price as manually overridden
-                        handleTotalPriceChange(parseFloat(e.target.value) || 0)
-                      }
-                      className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500 outline-none transition font-mono"
-                      placeholder="Auto-calculated"
-                    />
-                  </div>
-                  {isPriceManuallySet.current && (
-                    <p className="text-xs text-amber-600 mt-1">
-                      ⚠ Auto-calc paused. Change monthly price or dates to re-enable.
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <p className="text-sm text-amber-800">
+                      <strong>Security Deposit (10%):</strong> {formatIDR(securityDeposit)}
                     </p>
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg font-semibold text-emerald-800 mb-3">Inclusions</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {Object.entries(INCLUSION_LABELS).map(([key, label]) => (
+                        <label key={key} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                          <input type="checkbox"
+                            checked={inclusions[key as keyof typeof inclusions]}
+                            onChange={() => toggleInclusion(key)}
+                            className="rounded border-slate-300" />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                    <input placeholder="Other inclusions..." value={otherInclusions}
+                      onChange={(e) => setOtherInclusions(e.target.value)}
+                      className="mt-3 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                    <h4 className="text-sm font-medium text-slate-700 mb-2">Template Source</h4>
+                    {driveConnected ? (
+                      <p className="text-sm text-emerald-600 flex items-center gap-1">
+                        <CloudUpload className="w-4 h-4" />
+                        Using template from Google Drive (Lease Agreement 3rd party)
+                      </p>
+                    ) : (
+                      <div>
+                        <p className="text-sm text-slate-500 mb-2">
+                          Upload a local .docx template, or connect Google Drive above
+                        </p>
+                        <input type="file" accept=".docx"
+                          onChange={(e) => setLocalTemplateFile(e.target.files?.[0] || null)}
+                          className="text-sm" />
+                      </div>
+                    )}
+                  </div>
+
+                  {error && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <p className="text-sm text-red-700">{error}</p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-3">
+                    <button onClick={handleDownload} disabled={generating}
+                      className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                      <Download className="w-5 h-5" />
+                      {generating ? 'Generating...' : 'Download Contract'}
+                    </button>
+                    {driveConnected && (
+                      <button onClick={handleSaveToDrive} disabled={generating}
+                        className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                        <CloudUpload className="w-5 h-5" />
+                        {generating ? 'Saving...' : 'Save Copy to Drive'}
+                      </button>
+                    )}
+                  </div>
+
+                  {savedDriveLink && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-2">
+                      <Link2 className="w-5 h-5 text-blue-600" />
+                      <a href={savedDriveLink} target="_blank" rel="noopener noreferrer"
+                        className="text-blue-600 underline text-sm">
+                        Open saved contract in Google Drive
+                      </a>
+                    </div>
                   )}
                 </div>
-
-                {/* Security Deposit (display only) */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1">
-                    Security Deposit (10%)
-                  </label>
-                  <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg font-mono text-slate-700">
-                    {formatIDR(computedData.securityDeposit)}
-                  </div>
-                </div>
-
-                {/* Payment Due Date */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1">Payment Due Date</label>
-                  <input
-                    type="date"
-                    value={data.paymentDueDate}
-                    onChange={(e) => handleInputChange('paymentDueDate', e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500 outline-none transition"
-                  />
-                </div>
-              </div>
-            </section>
-
-            {/* Section: Inclusions */}
-            <section className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100">
-              <h2 className="text-xl font-bold text-emerald-900 mb-4 flex items-center gap-2">
-                <ListTodo className="w-5 h-5" /> Inclusions
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <Checkbox label="Cleaning 2x per week"           checked={data.inclusions.cleaning2x}  onChange={() => handleInclusionChange('cleaning2x')} />
-                <Checkbox label="Pool Maintenance 2x per week"   checked={data.inclusions.pool2x}      onChange={() => handleInclusionChange('pool2x')} />
-                <Checkbox label="Internet"                        checked={data.inclusions.internet}    onChange={() => handleInclusionChange('internet')} />
-                <Checkbox label="Laundry Linen & Towels 1x"      checked={data.inclusions.laundry}     onChange={() => handleInclusionChange('laundry')} />
-                <Checkbox label="Banjar Fee"                      checked={data.inclusions.banjarFee}   onChange={() => handleInclusionChange('banjarFee')} />
-                <Checkbox label="Rubbish Fee"                     checked={data.inclusions.rubbishFee}  onChange={() => handleInclusionChange('rubbishFee')} />
-                <Checkbox label="Electricity"                     checked={data.inclusions.electricity} onChange={() => handleInclusionChange('electricity')} />
-              </div>
-              <div className="mt-4">
-                <label className="block text-sm font-semibold text-slate-600 mb-1">Other Inclusions</label>
-                <input
-                  type="text"
-                  value={data.otherInclusions}
-                  onChange={(e) => handleInputChange('otherInclusions', e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500 outline-none transition"
-                  placeholder="e.g. Gardening, Water heater"
-                />
-              </div>
-            </section>
-          </div>
-
-          {/* ── Right Column: Generate + Guide ── */}
-          <div className="space-y-6">
-
-            {/* Generate Card */}
-            <div className="bg-emerald-500 text-emerald-50 p-6 rounded-xl shadow-lg sticky top-20">
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                <FileDown className="w-5 h-5" /> Generate Contract
-              </h3>
-
-              {/* ── Google Drive Connection ── */}
-              <div className="mb-4 bg-emerald-600/50 rounded-lg p-3">
-                <p className="text-xs uppercase tracking-wider text-emerald-300 mb-2">
-                  Template Source
-                </p>
-                {driveConnected ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-emerald-100">
-                      <CloudUpload className="w-4 h-4 text-emerald-300 flex-shrink-0" />
-                      <span className="font-medium">Lease Agreement Template</span>
-                    </div>
-                    <p className="text-xs text-emerald-300 truncate">
-                      via Google Drive
-                    </p>
-                    <button
-                      onClick={handleDisconnectDrive}
-                      className="flex items-center gap-1 text-xs text-emerald-300 hover:text-red-300 transition mt-1"
-                    >
-                      <LogOut className="w-3 h-3" /> Disconnect
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <button
-                      onClick={handleConnectDrive}
-                      className="w-full py-2 bg-white text-emerald-800 hover:bg-emerald-50 font-semibold rounded-lg text-sm transition flex items-center justify-center gap-2"
-                    >
-                      <CloudUpload className="w-4 h-4" />
-                      Connect Google Drive
-                    </button>
-                    <p className="text-xs text-emerald-300 text-center">
-                      Uses the standard lease template automatically
-                    </p>
-                    <div className="border-t border-emerald-500/50 pt-2">
-                      <p className="text-xs text-emerald-300 mb-1">Or upload manually:</p>
-                      <input
-                        type="file"
-                        accept=".docx"
-                        onChange={(e) => setLocalTemplateFile(e.target.files?.[0] || null)}
-                        className="block w-full text-xs text-emerald-100
-                          file:mr-2 file:py-1 file:px-3
-                          file:rounded-full file:border-0
-                          file:text-xs file:font-semibold
-                          file:bg-emerald-700 file:text-emerald-100
-                          hover:file:bg-emerald-600"
-                      />
-                      {localTemplateFile && (
-                        <p className="text-xs text-emerald-200 mt-1 truncate">✓ {localTemplateFile.name}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {driveStatus && (
-                  <p className="text-xs text-emerald-200 mt-2 animate-pulse">{driveStatus}</p>
-                )}
-              </div>
-
-              {/* ── Download Buttons ── */}
-              <div className="space-y-2">
-                {/* Download locally */}
-                <button
-                  onClick={handleDownload}
-                  disabled={isGenerating || (!driveConnected && !localTemplateFile)}
-                  className="w-full py-3 bg-emerald-900 hover:bg-emerald-800 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2"
-                >
-                  <FileDown className="w-4 h-4" />
-                  {isGenerating ? 'Generating…' : 'Download Contract'}
-                </button>
-
-                {/* Save to Drive (owner/agent copy) */}
-                {driveConnected && (
-                  <button
-                    onClick={handleSaveToDrive}
-                    disabled={isGenerating}
-                    className="w-full py-3 bg-blue-700 hover:bg-blue-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2"
-                  >
-                    <CloudUpload className="w-4 h-4" />
-                    {isGenerating ? 'Saving…' : 'Save Copy to Drive'}
-                  </button>
-                )}
-              </div>
-
-              {/* Drive link after save */}
-              {savedDriveLink && (
-                <a
-                  href={savedDriveLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-3 flex items-center gap-2 text-xs text-emerald-200 hover:text-white underline underline-offset-2 transition"
-                >
-                  <Link2 className="w-3 h-3" />
-                  Open in Google Drive →
-                </a>
               )}
-
-              {/* Fixed: inline generate error instead of alert() */}
-              {generateError && (
-                <div className="mt-3 text-xs text-red-200 bg-red-900/40 rounded p-2 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>{generateError}</span>
-                </div>
-              )}
-
-              <p className="text-xs text-emerald-400 mt-3">
-                Template: Lease Agreement 3rd party · IDR currency
-              </p>
             </div>
 
-            {/* Template Guide */}
-            <TemplateGuide />
+            <aside className="lg:col-span-1">
+              <TemplateGuide />
+            </aside>
           </div>
         </main>
+
+        <footer className="bg-white border-t border-emerald-100 mt-12">
+          <div className="max-w-7xl mx-auto px-4 py-6 text-center text-slate-600">
+            <p>Villa Contract Manager v2.5 - Built with React and TypeScript</p>
+          </div>
+        </footer>
       </div>
     </ErrorBoundary>
   );
-};
+}
 
 export default App;
