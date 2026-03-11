@@ -556,7 +556,7 @@ const App: React.FC = () => {
               </div>
               <div>
                 <h1 className="text-xl sm:text-2xl font-bold tracking-wide leading-tight">Villa Contract Generator 🌿</h1>
-                <p className="text-xs text-emerald-300 hidden sm:block">Bali Villa Rental Agreements</p>
+                <p className="text-xs text-emerald-300 hidden sm:block">Clarity Homes Bali part of TVM</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
