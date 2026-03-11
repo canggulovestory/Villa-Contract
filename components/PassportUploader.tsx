@@ -5,7 +5,8 @@ import { scanPassport } from '../services/ocrService';
 // ─── Types ────────────────────────────────────────────────────────────────
 
 interface PassportUploaderProps {
-  onScanComplete: (name: string, passport: string) => void;
+  id: string;                                            // unique per guest instance
+  onScanComplete: (name: string, passport: string, file?: File) => void;
 }
 
 // ─── PassportUploader ─────────────────────────────────────────────────────
@@ -20,7 +21,7 @@ interface PassportUploaderProps {
 //  4. Accepts .heic in addition to JPG/PNG (common iPhone format).
 //  5. onScanComplete is only called with real data (no silent empty override).
 
-export const PassportUploader: React.FC<PassportUploaderProps> = ({ onScanComplete }) => {
+export const PassportUploader: React.FC<PassportUploaderProps> = ({ id, onScanComplete }) => {
   const [isScanning, setIsScanning]   = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [status, setStatus]           = useState<'idle' | 'success' | 'partial'>('idle');
@@ -39,8 +40,8 @@ export const PassportUploader: React.FC<PassportUploaderProps> = ({ onScanComple
       const name     = result.extractedName     || '';
       const passport = result.extractedPassport || '';
 
-      // Always fire the callback so the parent can update fields
-      onScanComplete(name, passport);
+      // Always fire the callback so the parent can update fields (pass file for Drive upload)
+      onScanComplete(name, passport, file);
 
       if (name || passport) {
         // Fixed: only mark as "success" when we actually found something
@@ -66,7 +67,7 @@ export const PassportUploader: React.FC<PassportUploaderProps> = ({ onScanComple
     <div className="bg-emerald-50 border-2 border-dashed border-emerald-300 rounded-xl p-6 text-center transition-colors hover:bg-emerald-100">
       <input
         type="file"
-        id="passport-upload"
+        id={id}
         // Fixed: added .heic (iPhone default) alongside jpg/png
         accept="image/png, image/jpeg, image/jpg, image/heic"
         className="hidden"
@@ -74,7 +75,7 @@ export const PassportUploader: React.FC<PassportUploaderProps> = ({ onScanComple
         disabled={isScanning}
       />
 
-      <label htmlFor="passport-upload" className="cursor-pointer flex flex-col items-center gap-3">
+      <label htmlFor={id} className="cursor-pointer flex flex-col items-center gap-3">
         {isScanning ? (
           <div className="animate-pulse flex flex-col items-center">
             <ScanLine className="w-10 h-10 text-emerald-600 animate-bounce" />

@@ -11,6 +11,7 @@ import { generateDocument, downloadContractLocally } from './services/docService
 import {
   isSignedIn, signInToGoogle, signOutFromGoogle,
   fetchTemplateFromDrive, saveContractToDrive,
+  saveDealToDrive, PassportFile,
 } from './services/googleDriveService';
 import { TemplateGuide } from './components/TemplateGuide';
 import { PassportUploader } from './components/PassportUploader';
@@ -139,6 +140,8 @@ const App: React.FC = () => {
   const [savedOwners, setSavedOwners]             = useState<LessorData[]>([]);
   const [savedAgents, setSavedAgents]             = useState<AgentData[]>([]);
   const isPriceManuallySet                        = useRef(false);
+  const [guestPassportFiles, setGuestPassportFiles] = useState<(File | null)[]>([null]);
+  const [dealFolderLink, setDealFolderLink]         = useState<string>('');
 
   // ─── Load saved contacts from localStorage ───────────────────────────────
   useEffect(() => {
@@ -237,15 +240,26 @@ const App: React.FC = () => {
   const addGuest = () => {
     if (data.guests.length >= MAX_GUESTS) return;
     setData(prev => ({ ...prev, guests: [...prev.guests, makeNewGuest(prev.guests.length + 1)] }));
+    setGuestPassportFiles(prev => [...prev, null]);
   };
   const removeGuest = (index: number) => {
     if (data.guests.length <= MIN_GUESTS) return;
     setData(prev => ({ ...prev, guests: prev.guests.filter((_, i) => i !== index) }));
+    setGuestPassportFiles(prev => prev.filter((_, i) => i !== index));
   };
-  const handlePassportScan = (index: number, name: string, passport: string) => {
+  const handlePassportScan = (index: number, name: string, passport: string, file?: File) => {
     const gs = [...data.guests];
     gs[index] = { ...gs[index], ...(name ? { name } : {}), ...(passport ? { passportNumber: passport } : {}) };
     setData(prev => ({ ...prev, guests: gs }));
+    // Store the original File so we can upload it to Drive Deal Folder on generate
+    if (file) {
+      setGuestPassportFiles(prev => {
+        const updated = [...prev];
+        while (updated.length <= index) updated.push(null);
+        updated[index] = file;
+        return updated;
+      });
+    }
   };
 
   // ─── Saved Contacts ───────────────────────────────────────────────────────
@@ -358,15 +372,36 @@ const App: React.FC = () => {
     finally { setIsGenerating(false); }
   };
   const handleSaveToDrive = async () => {
-    setFormErrors([]); setGenerateError(''); setSavedDriveLink('');
+    setFormErrors([]); setGenerateError(''); setSavedDriveLink(''); setDealFolderLink('');
     if (!driveConnected) { setGenerateError('Connect Google Drive first.'); return; }
     if (runValidation().length > 0) return;
-    setIsGenerating(true); setDriveStatus('Generating & saving…');
+    setIsGenerating(true); setDriveStatus('Creating Deal Folder…');
     try {
       const src = await resolveTemplate(); if (!src) return;
+
+      // Convert template source to raw ArrayBuffer for Drive upload
+      const templateBuffer: ArrayBuffer =
+        src instanceof File ? await src.arrayBuffer() : src as ArrayBuffer;
+
       const { buffer, filename } = await generateDocument(src, data, computedData);
-      const link = await saveContractToDrive(buffer, filename);
-      setSavedDriveLink(link); setDriveStatus('Saved to Drive ✓');
+
+      // Build deal folder name: VillaSentosa_John_20250401
+      const guestFirst   = (data.guests[0]?.name || 'Guest').split(' ')[0].replace(/\s+/g, '_');
+      const villaSlug    = (data.villaName || 'Villa').replace(/\s+/g, '_');
+      const dateSlug     = data.checkInDate ? data.checkInDate.replace(/-/g, '') : 'NoDate';
+      const dealFolderName = `${villaSlug}_${guestFirst}_${dateSlug}`;
+
+      // Collect passport files that were actually uploaded
+      const passportFilesForDrive: PassportFile[] = guestPassportFiles
+        .map((file, i) => file ? { file, guestName: data.guests[i]?.name || `Guest${i + 1}` } : null)
+        .filter((x): x is PassportFile => x !== null);
+
+      const result = await saveDealToDrive(
+        buffer, filename, templateBuffer, passportFilesForDrive, dealFolderName
+      );
+      setSavedDriveLink(result.contractFileLink);
+      setDealFolderLink(result.folderLink);
+      setDriveStatus('Saved to Drive ✓');
     } catch (e: unknown) { setGenerateError(e instanceof Error ? e.message : 'Error saving to Drive.'); setDriveStatus(''); }
     finally { setIsGenerating(false); }
   };
@@ -610,7 +645,10 @@ const App: React.FC = () => {
                         )}
                       </div>
                       <div className="p-4 space-y-3">
-                        <PassportUploader onScanComplete={(name, passport) => handlePassportScan(index, name, passport)} />
+                        <PassportUploader
+                          id={`passport-upload-${index}`}
+                          onScanComplete={(name, passport, file) => handlePassportScan(index, name, passport, file)}
+                        />
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {[
                             { field: 'name' as const,          label: 'Full Name',        req: true,  type: 'text', ph: 'As on passport' },
@@ -1103,7 +1141,13 @@ const App: React.FC = () => {
                     {savedDriveLink && (
                       <a href={savedDriveLink} target="_blank" rel="noopener noreferrer"
                         className="flex items-center gap-2 text-xs text-emerald-200 hover:text-white underline underline-offset-2 transition">
-                        <Link2 className="w-3 h-3" /> Open saved contract in Drive →
+                        <Link2 className="w-3 h-3" /> Open contract in Drive →
+                      </a>
+                    )}
+                    {dealFolderLink && (
+                      <a href={dealFolderLink} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-xs text-sky-300 hover:text-white underline underline-offset-2 transition">
+                        <FolderOpen className="w-3 h-3" /> 📁 Open Deal Folder →
                       </a>
                     )}
                     {generateError && (
