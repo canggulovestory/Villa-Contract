@@ -69,7 +69,12 @@ export const getAccessToken = (): string | null => accessToken;
 export const fetchTemplateFromDrive = async (): Promise<ArrayBuffer> => {
   if (!accessToken) throw new Error('Not signed in to Google');
 
-  const url = 'https://www.googleapis.com/drive/v3/files/' + TEMPLATE_FILE_ID + '?alt=media&key=' + API_KEY;
+  // Use /export to convert Google Doc → .docx on the fly.
+  // (If the file were an uploaded .docx, you'd use ?alt=media instead.)
+  const url =
+    'https://www.googleapis.com/drive/v3/files/' +
+    TEMPLATE_FILE_ID +
+    '/export?mimeType=application%2Fvnd.openxmlformats-officedocument.wordprocessingml.document';
   const res = await fetch(url, {
     headers: { Authorization: 'Bearer ' + accessToken },
   });
