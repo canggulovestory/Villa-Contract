@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  ContractData, ComputedData, CopyType, CommissionType,
+  ContractData, ComputedData, CopyType, CommissionType, PaymentCurrency,
   LessorData, AgentData, AgentPlatforms, PartnershipType,
   INITIAL_DATA, INITIAL_LESSOR, INITIAL_AGENT,
   makeNewGuest,
@@ -173,7 +173,9 @@ const App: React.FC = () => {
       numberOfNights = Math.max(0, Math.ceil(diff / 86400000));
     }
     const numberOfMonths  = numberOfNights > 0 ? parseFloat((numberOfNights / 30).toFixed(2)) : 0;
-    const securityDeposit = data.totalPrice * SECURITY_DEPOSIT_RATE;
+    const securityDeposit = data.securityDepositOverride > 0
+      ? data.securityDepositOverride
+      : data.totalPrice * SECURITY_DEPOSIT_RATE;
     const active: string[] = [];
     if (data.inclusions.cleaning2x)  active.push('Cleaning 2x per week');
     if (data.inclusions.pool2x)      active.push('Pool Maintenance 2x per week');
@@ -469,6 +471,23 @@ const App: React.FC = () => {
     { key: 'rubbishFee' as const,  label: 'Rubbish Collection Fee',        emoji: '🗑' },
     { key: 'electricity' as const, label: 'Electricity',                   emoji: '⚡' },
   ];
+
+  // ─── Currency helpers ─────────────────────────────────────────────────────
+  const CURRENCY_SYMBOLS: Record<PaymentCurrency, string> = { IDR: 'Rp', USD: '$', EUR: '€', USDT: 'USDT' };
+  const currencySymbol = CURRENCY_SYMBOLS[data.paymentCurrency] ?? 'Rp';
+  const isIDR = data.paymentCurrency === 'IDR';
+
+  /** Format a number for display based on selected currency */
+  const formatCurrencyDisplay = (n: number): string => {
+    if (isIDR) return formatIDR(n);
+    return `${data.paymentCurrency} ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n)}`;
+  };
+
+  /** Parse an IDR-formatted string (strips dots) into a number */
+  const parseIDRInput = (s: string): number => {
+    const n = Number(s.replace(/\./g, '').replace(/[^\d]/g, ''));
+    return isNaN(n) ? 0 : n;
+  };
 
   // ─── Reusable section header ──────────────────────────────────────────────
   const SectionHeader = ({ num, icon, title, right }: {
@@ -844,46 +863,113 @@ const App: React.FC = () => {
 
               {/* ── SECTION 4: Financials ── */}
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <SectionHeader num={4} icon={<CreditCard className="w-4 h-4 text-emerald-600" />} title="Financials (IDR)" />
+                <SectionHeader num={4} icon={<CreditCard className="w-4 h-4 text-emerald-600" />} title="Financials" />
                 <div className="px-6 py-5 space-y-4">
-                  {/* Monthly Price */}
-                  <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                    <label className="block text-sm font-bold text-blue-800 mb-2">Monthly Price (Rp) <span className="text-red-400">*</span></label>
-                    <div className="flex items-center border border-blue-200 rounded-xl overflow-hidden bg-white">
-                      <span className="px-3 py-2.5 text-slate-500 font-bold text-sm bg-slate-50 border-r border-blue-200 flex-shrink-0">Rp</span>
-                      <input type="number" value={data.monthlyPrice || ''}
-                        onChange={e => handleInputChange('monthlyPrice', parseFloat(e.target.value) || 0)}
-                        className="flex-1 px-3 py-2.5 text-sm font-mono outline-none focus:bg-blue-50/30 transition"
-                        placeholder="e.g. 30000000" />
+
+                  {/* ① Currency Selector */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Payment Currency</label>
+                    <div className="flex gap-2 flex-wrap">
+                      {(['IDR', 'USD', 'EUR', 'USDT'] as PaymentCurrency[]).map(cur => (
+                        <button key={cur} onClick={() => handleInputChange('paymentCurrency', cur)}
+                          className={`px-5 py-2 rounded-xl text-sm font-bold border-2 transition active:scale-95 ${
+                            data.paymentCurrency === cur
+                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-emerald-300'
+                          }`}>
+                          {cur}
+                        </button>
+                      ))}
                     </div>
-                    {data.monthlyPrice > 0 && <p className="text-xs text-blue-500 font-bold mt-1.5">= {formatIDR(data.monthlyPrice)} / month</p>}
                   </div>
 
+                  {/* ② Monthly / Base Price */}
+                  <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                    <label className="block text-sm font-bold text-blue-800 mb-2">
+                      Monthly / Base Price <span className="text-red-400">*</span>
+                    </label>
+                    <div className="flex items-center border border-blue-200 rounded-xl overflow-hidden bg-white">
+                      <span className="px-3 py-2.5 text-slate-500 font-bold text-sm bg-slate-50 border-r border-blue-200 flex-shrink-0">{currencySymbol}</span>
+                      {isIDR ? (
+                        <input type="text" inputMode="numeric"
+                          value={data.monthlyPrice > 0 ? data.monthlyPrice.toLocaleString('id-ID') : ''}
+                          onChange={e => { isPriceManuallySet.current = false; handleInputChange('monthlyPrice', parseIDRInput(e.target.value)); }}
+                          className="flex-1 px-3 py-2.5 text-sm font-mono outline-none focus:bg-blue-50/30 transition"
+                          placeholder="e.g. 30.000.000" />
+                      ) : (
+                        <input type="number" value={data.monthlyPrice || ''}
+                          onChange={e => { isPriceManuallySet.current = false; handleInputChange('monthlyPrice', parseFloat(e.target.value) || 0); }}
+                          className="flex-1 px-3 py-2.5 text-sm font-mono outline-none focus:bg-blue-50/30 transition"
+                          placeholder="e.g. 3000" />
+                      )}
+                    </div>
+                    {data.monthlyPrice > 0 && <p className="text-xs text-blue-500 font-bold mt-1.5">= {formatCurrencyDisplay(data.monthlyPrice)} / month</p>}
+                    <p className="text-xs text-blue-400 mt-1">Auto-calculates Total Price based on nights (pro-rated)</p>
+                  </div>
+
+                  {/* ③ Total + Security Deposit */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Total Price */}
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Total Agreed Price (Rp) <span className="text-red-400">*</span></label>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Total Agreed Price <span className="text-red-400">*</span></label>
                       <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
-                        <span className="px-3 py-2.5 text-slate-500 font-bold text-sm bg-slate-50 border-r border-slate-200 flex-shrink-0">Rp</span>
-                        <input type="number" value={data.totalPrice || ''}
-                          onChange={e => handleTotalPriceChange(parseFloat(e.target.value) || 0)}
-                          className="flex-1 px-3 py-2.5 text-sm font-mono outline-none transition"
-                          placeholder="Auto-calculated" />
+                        <span className="px-3 py-2.5 text-slate-500 font-bold text-sm bg-slate-50 border-r border-slate-200 flex-shrink-0">{currencySymbol}</span>
+                        {isIDR ? (
+                          <input type="text" inputMode="numeric"
+                            value={data.totalPrice > 0 ? data.totalPrice.toLocaleString('id-ID') : ''}
+                            onChange={e => handleTotalPriceChange(parseIDRInput(e.target.value))}
+                            className="flex-1 px-3 py-2.5 text-sm font-mono outline-none transition"
+                            placeholder="Auto-calculated" />
+                        ) : (
+                          <input type="number" value={data.totalPrice || ''}
+                            onChange={e => handleTotalPriceChange(parseFloat(e.target.value) || 0)}
+                            className="flex-1 px-3 py-2.5 text-sm font-mono outline-none transition"
+                            placeholder="Auto-calculated" />
+                        )}
                       </div>
-                      {data.totalPrice > 0 && <p className="text-xs text-slate-500 mt-1 font-semibold">{formatIDR(data.totalPrice)}</p>}
+                      {data.totalPrice > 0 && <p className="text-xs text-slate-500 mt-1 font-semibold">{formatCurrencyDisplay(data.totalPrice)}</p>}
                       {isPriceManuallySet.current && <p className="text-xs text-amber-600 mt-1">⚠ Manual override active</p>}
                     </div>
-                    {/* Security Deposit */}
+                    {/* Security Deposit — editable with Reset to 10% */}
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Security Deposit (10% of Total)</label>
-                      <div className="px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
-                        <span className="text-sm font-bold text-amber-800 font-mono">{formatIDR(computedData.securityDeposit)}</span>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-sm font-semibold text-slate-700">Security Deposit</label>
+                        {data.securityDepositOverride > 0 && (
+                          <button onClick={() => handleInputChange('securityDepositOverride', 0)}
+                            className="text-xs text-blue-500 hover:text-blue-700 font-semibold transition">
+                            Reset to 10%
+                          </button>
+                        )}
                       </div>
-                      <p className="text-xs text-slate-400 mt-1">Auto-calculated · non-editable</p>
+                      <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
+                        <span className="px-3 py-2.5 text-slate-500 font-bold text-sm bg-slate-50 border-r border-slate-200 flex-shrink-0">{currencySymbol}</span>
+                        {isIDR ? (
+                          <input type="text" inputMode="numeric"
+                            value={computedData.securityDeposit > 0 ? computedData.securityDeposit.toLocaleString('id-ID') : ''}
+                            onChange={e => handleInputChange('securityDepositOverride', parseIDRInput(e.target.value))}
+                            className="flex-1 px-3 py-2.5 text-sm font-mono outline-none transition"
+                            placeholder="Auto: 10% of total" />
+                        ) : (
+                          <input type="number" value={computedData.securityDeposit || ''}
+                            onChange={e => handleInputChange('securityDepositOverride', parseFloat(e.target.value) || 0)}
+                            className="flex-1 px-3 py-2.5 text-sm font-mono outline-none transition"
+                            placeholder="Auto: 10% of total" />
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">Auto-set to 10% — override as needed</p>
                     </div>
                   </div>
 
-                  {/* Payment Schedule — 3 fields matching template {{firstPaymentAmount}}, {{firstPaymentDueDate}}, {{followingPayments}} */}
+                  {/* ④ Payment Terms */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Payment Terms</label>
+                    <input type="text" value={data.paymentTerms}
+                      onChange={e => handleInputChange('paymentTerms', e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"
+                      placeholder="e.g. Full upfront / 50% on check-in" />
+                  </div>
+
+                  {/* ⑤ Payment Schedule */}
                   <div className="border border-slate-200 rounded-xl overflow-hidden">
                     <div className="px-4 py-2 bg-slate-50 border-b border-slate-100">
                       <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Payment Schedule</span>
@@ -904,17 +990,45 @@ const App: React.FC = () => {
                             className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition" />
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Following Payments</label>
-                        <input type="text" value={data.followingPayments}
-                          onChange={e => handleInputChange('followingPayments', e.target.value)}
-                          className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"
-                          placeholder="e.g. Balance of IDR 27,000,000 due on check-in date" />
-                      </div>
+                      {/* Following Payment — toggled */}
+                      {!data.showFollowingPayment ? (
+                        <button onClick={() => handleInputChange('showFollowingPayment', true)}
+                          className="flex items-center gap-1.5 text-sm text-emerald-600 hover:text-emerald-800 font-semibold transition">
+                          <Plus className="w-4 h-4" /> Add following payment (optional)
+                        </button>
+                      ) : (
+                        <div className="pt-1 space-y-3 border-t border-slate-100">
+                          <div className="flex items-center justify-between pt-2">
+                            <span className="text-sm font-semibold text-slate-600">Following Payment</span>
+                            <button onClick={() => {
+                              handleInputChange('showFollowingPayment', false);
+                              handleInputChange('followingPaymentAmount', '');
+                              handleInputChange('followingPaymentDueDate', '');
+                            }} className="text-xs text-slate-400 hover:text-red-500 transition flex items-center gap-1">
+                              <X className="w-3 h-3" /> Remove
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Following Payment Amount</label>
+                              <input type="text" value={data.followingPaymentAmount}
+                                onChange={e => handleInputChange('followingPaymentAmount', e.target.value)}
+                                className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"
+                                placeholder="e.g. Balance IDR 27,000,000" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Following Payment Due Date</label>
+                              <input type="date" value={data.followingPaymentDueDate}
+                                onChange={e => handleInputChange('followingPaymentDueDate', e.target.value)}
+                                className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Commission — collapsible amber panel */}
+                  {/* ⑥ Commission — collapsible amber panel */}
                   <div className="border border-amber-200 rounded-xl overflow-hidden">
                     <button onClick={() => setCommissionOpen(o => !o)}
                       className="w-full px-4 py-3 flex items-center justify-between bg-amber-50 hover:bg-amber-100/60 transition text-left">
@@ -927,7 +1041,6 @@ const App: React.FC = () => {
                     </button>
                     {commissionOpen && (
                       <div className="px-4 pb-4 pt-3 bg-white space-y-3">
-                        {/* Commission Type */}
                         <div>
                           <label className="block text-xs font-semibold text-slate-600 mb-1.5">Commission Basis</label>
                           <div className="grid grid-cols-3 gap-2">
@@ -936,8 +1049,7 @@ const App: React.FC = () => {
                               { value: 'percent_monthly', label: '% of Monthly' },
                               { value: 'fixed',           label: 'Fixed Amount' },
                             ] as { value: CommissionType; label: string }[]).map(opt => (
-                              <button key={opt.value}
-                                onClick={() => handleInputChange('commissionType', opt.value)}
+                              <button key={opt.value} onClick={() => handleInputChange('commissionType', opt.value)}
                                 className={`py-2 text-xs font-semibold rounded-xl border-2 transition ${
                                   data.commissionType === opt.value
                                     ? 'bg-amber-500 border-amber-500 text-white'
@@ -948,9 +1060,7 @@ const App: React.FC = () => {
                             ))}
                           </div>
                         </div>
-
                         <div className="grid grid-cols-2 gap-3">
-                          {/* Rate */}
                           {data.commissionType !== 'fixed' && (
                             <div>
                               <label className="block text-xs font-semibold text-slate-600 mb-1">Rate (%)</label>
@@ -964,44 +1074,35 @@ const App: React.FC = () => {
                               </div>
                             </div>
                           )}
-                          {/* Amount */}
                           <div>
                             <label className="block text-xs font-semibold text-slate-600 mb-1">
-                              Amount (Rp) {data.commissionType !== 'fixed' && <span className="text-slate-400 font-normal">— auto</span>}
+                              Amount ({currencySymbol}) {data.commissionType !== 'fixed' && <span className="text-slate-400 font-normal">— auto</span>}
                             </label>
                             <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
-                              <span className="px-2 py-2 text-slate-500 font-bold text-xs bg-slate-50 border-r border-slate-200">Rp</span>
+                              <span className="px-2 py-2 text-slate-500 font-bold text-xs bg-slate-50 border-r border-slate-200">{currencySymbol}</span>
                               <input type="number" min={0}
                                 value={data.commissionAmount || ''}
                                 readOnly={data.commissionType !== 'fixed'}
-                                onChange={e => data.commissionType === 'fixed'
-                                  ? handleInputChange('commissionAmount', parseFloat(e.target.value) || 0)
-                                  : undefined
-                                }
+                                onChange={e => data.commissionType === 'fixed' ? handleInputChange('commissionAmount', parseFloat(e.target.value) || 0) : undefined}
                                 className={`flex-1 px-3 py-2 text-sm font-mono outline-none ${data.commissionType !== 'fixed' ? 'bg-slate-50 text-slate-500' : ''}`}
                                 placeholder="0" />
                             </div>
                             {data.commissionAmount > 0 && (
-                              <p className="text-xs text-amber-600 mt-1 font-semibold">{formatIDR(data.commissionAmount)}</p>
+                              <p className="text-xs text-amber-600 mt-1 font-semibold">{formatCurrencyDisplay(data.commissionAmount)}</p>
                             )}
                           </div>
                         </div>
-
-                        {/* Net to Owner */}
                         {data.commissionAmount > 0 && data.totalPrice > 0 && (
                           <div className="bg-amber-50 rounded-xl px-4 py-2.5 flex items-center justify-between border border-amber-200">
                             <span className="text-xs font-bold text-amber-700">Net to Owner:</span>
                             <span className="text-sm font-bold text-amber-900 font-mono">
-                              {formatIDR(data.totalPrice - data.commissionAmount)}
+                              {formatCurrencyDisplay(data.totalPrice - data.commissionAmount)}
                             </span>
                           </div>
                         )}
-
-                        {/* Commission Notes */}
                         <div>
                           <label className="block text-xs font-semibold text-slate-600 mb-1">Payment Notes (optional)</label>
-                          <input type="text"
-                            value={data.commissionNotes}
+                          <input type="text" value={data.commissionNotes}
                             onChange={e => handleInputChange('commissionNotes', e.target.value)}
                             className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-amber-400 outline-none transition"
                             placeholder="e.g. Paid within 7 days of check-in" />
@@ -1009,6 +1110,7 @@ const App: React.FC = () => {
                       </div>
                     )}
                   </div>
+
                 </div>
               </section>
 

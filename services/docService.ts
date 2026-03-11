@@ -138,7 +138,14 @@ export const generateDocument = async (
   if (data.commissionType === 'percent_monthly') commissionBaseLabel = `${data.commissionPercent}% of Monthly Rent`;
   if (data.commissionType === 'fixed')           commissionBaseLabel = 'Fixed Amount';
 
-  // ── 6b. Template-exact aliases — these names match {{tag}} in LEASE_AGREEMENT_FINAL.docx
+  // ── 6b. Currency-aware amount formatter
+  const currency = data.paymentCurrency ?? 'IDR';
+  const formatAmount = (n: number): string => {
+    if (currency === 'IDR') return formatIDR(n);
+    return new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n);
+  };
+
+  // ── 6c. Template-exact aliases — these names match {{tag}} in LEASE_AGREEMENT_FINAL.docx
   const today = new Date().toISOString().split('T')[0];
   const templateExactAliases = {
     // {{createdDate}} — date the contract is generated
@@ -160,8 +167,17 @@ export const generateDocument = async (
     // {{firstPaymentDueDate}} — alias for paymentDueDate
     firstPaymentDueDate: formatDate(data.paymentDueDate),
 
-    // {{followingPayments}} — free text description of subsequent payments
-    followingPayments: data.followingPayments ?? '',
+    // {{followingPayments}} — combines followingPaymentAmount + followingPaymentDueDate
+    followingPayments: [
+      data.followingPaymentAmount,
+      data.followingPaymentDueDate ? `due ${formatDate(data.followingPaymentDueDate)}` : '',
+    ].filter(Boolean).join(' — '),
+
+    // {{paymentTerms}} — free text payment terms
+    paymentTerms: data.paymentTerms ?? '',
+
+    // {{paymentCurrency}} — selected currency
+    paymentCurrency: currency,
 
     // Signature placeholders — left blank for manual signing
     lessorSignature: '',
@@ -184,10 +200,10 @@ export const generateDocument = async (
     checkOutDate:   formatDate(data.checkOutDate),
     paymentDueDate: formatDate(data.paymentDueDate),
 
-    // Currency — formatted IDR
-    totalPrice:      formatIDR(data.totalPrice),
-    monthlyPrice:    formatIDR(data.monthlyPrice),
-    securityDeposit: formatIDR(computed.securityDeposit),
+    // Currency — formatted based on selected paymentCurrency
+    totalPrice:      formatAmount(data.totalPrice),
+    monthlyPrice:    formatAmount(data.monthlyPrice),
+    securityDeposit: formatAmount(computed.securityDeposit),
 
     // Raw numeric values
     totalPriceRaw:      data.totalPrice,

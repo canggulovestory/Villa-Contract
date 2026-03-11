@@ -2,6 +2,7 @@
 
 export type CopyType = 'CLIENT' | 'OWNER' | 'AGENT';
 export type CommissionType = 'percent_total' | 'percent_monthly' | 'fixed';
+export type PaymentCurrency = 'IDR' | 'USD' | 'EUR' | 'USDT';
 
 export interface Guest {
   id: string;            // unique internal key for React lists
@@ -88,12 +89,17 @@ export interface ContractData {
   checkInDate: string;
   checkOutDate: string;
 
-  // Financials (IDR)
+  // Financials
+  paymentCurrency: PaymentCurrency;    // IDR | USD | EUR | USDT
   monthlyPrice: number;
   totalPrice: number;
-  paymentDueDate: string;        // kept for backward compat; docService also maps → firstPaymentDueDate
-  firstPaymentAmount: string;    // free text e.g. "IDR 3,000,000 (security deposit)"
-  followingPayments: string;     // free text e.g. "Balance due on check-in date"
+  securityDepositOverride: number;     // 0 = auto (10% of total); >0 = manual override
+  paymentTerms: string;                // e.g. "Full upfront / 50% on check-in"
+  paymentDueDate: string;              // kept for backward compat; mapped → firstPaymentDueDate
+  firstPaymentAmount: string;          // free text e.g. "IDR 3,000,000 (security deposit)"
+  followingPaymentAmount: string;      // e.g. "Balance IDR 27,000,000"
+  followingPaymentDueDate: string;     // ISO date for following payment
+  showFollowingPayment: boolean;       // UI toggle for following payment row
 
   // Property Code
   propertyCode: string;          // e.g. "VS-001", maps → {{propertyCode}} in template
@@ -194,11 +200,16 @@ export const INITIAL_DATA: ContractData = {
   guests: [makeNewGuest(1)],
   checkInDate: '',
   checkOutDate: '',
+  paymentCurrency: 'IDR',
   monthlyPrice: 0,
   totalPrice: 0,
+  securityDepositOverride: 0,
+  paymentTerms: '',
   paymentDueDate: '',
   firstPaymentAmount: '',
-  followingPayments: '',
+  followingPaymentAmount: '',
+  followingPaymentDueDate: '',
+  showFollowingPayment: false,
   commissionType: 'percent_total',
   commissionPercent: 0,
   commissionAmount: 0,
