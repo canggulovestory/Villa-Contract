@@ -328,6 +328,7 @@ export interface VillaRow {
   address: string;
   bedrooms: number;
   propertyCode: string;
+  monthlyPrice?: number;   // from "Price month" column if present
 }
 
 /**
@@ -363,29 +364,49 @@ export const fetchVillaListFromSheets = async (): Promise<VillaRow[]> => {
   const rows: string[][] = valJson.values ?? [];
   if (rows.length < 2) return [];
 
-  // Step 3: map headers
+  // Step 3: map headers — case-insensitive, supports your sheet's exact column names
   const headers = rows[0].map((h: string) => h.trim().toLowerCase());
-  const colIdx = (keys: string[]): number =>
-    headers.findIndex(h => keys.some(k => h.includes(k)));
 
-  const nameCol    = colIdx(['villa name', 'name', 'villa']);
-  const addrCol    = colIdx(['address', 'location', 'alamat']);
-  const bedroomCol = colIdx(['bedroom', 'br ', ' br', 'beds', 'kamar']);
-  const codeCol    = colIdx(['code', 'kode', 'ref', 'property code']);
+  // colExact: match header exactly; colContains: match if header contains any key
+  const colExact    = (keys: string[]): number => headers.findIndex(h => keys.includes(h));
+  const colContains = (keys: string[]): number => headers.findIndex(h => keys.some(k => h.includes(k)));
+  const firstValid  = (...idxs: number[]): number => idxs.find(i => i !== -1) ?? -1;
 
-  if (nameCol === -1) throw new Error('Could not find a "name" column in the villa sheet');
+  // "Listing title" (exact) > "villa name" / "name" / "villa" (contains)
+  const nameCol    = firstValid(colExact(['listing title', 'listing']), colContains(['villa name', 'name', 'villa', 'title']));
+  // "Area" (exact) > "address" / "location"
+  const addrCol    = firstValid(colExact(['area', 'address', 'location', 'alamat']), colContains(['address', 'location', 'area', 'alamat']));
+  // "BR" (exact) > "bedroom" / "beds"
+  const bedroomCol = firstValid(colExact(['br', 'bedroom', 'bedrooms', 'beds', 'kamar']), colContains(['bedroom', 'beds', 'kamar']));
+  // "Code" (exact) > "property code" / "ref"
+  const codeCol    = firstValid(colExact(['code', 'kode', 'ref']), colContains(['property code', 'code', 'kode', 'ref']));
+  // "Price month" (exact) > "monthly price"
+  const priceMonthCol = firstValid(colExact(['price month', 'price/month', 'monthly price', 'harga bulan']), colContains(['price month', 'monthly price']));
+
+  if (nameCol === -1) throw new Error('Could not find a villa name column ("Listing title" / "Name") in the sheet');
+
+  // Parse a price cell — strips non-numeric chars (Rp, commas, spaces) → number
+  const parsePrice = (raw: string): number => {
+    const n = parseFloat(raw.replace(/[^\d.]/g, ''));
+    return isNaN(n) ? 0 : n;
+  };
 
   const villas: VillaRow[] = [];
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     const name = r[nameCol]?.trim();
     if (!name) continue;           // skip empty rows
-    villas.push({
+    const villa: VillaRow = {
       name,
-      address:      addrCol    !== -1 ? (r[addrCol]    ?? '').trim() : '',
-      bedrooms:     bedroomCol !== -1 ? (parseInt(r[bedroomCol] ?? '1') || 1) : 1,
-      propertyCode: codeCol    !== -1 ? (r[codeCol]    ?? '').trim() : '',
-    });
+      address:      addrCol      !== -1 ? (r[addrCol]      ?? '').trim() : '',
+      bedrooms:     bedroomCol   !== -1 ? (parseInt(r[bedroomCol] ?? '1') || 1) : 1,
+      propertyCode: codeCol      !== -1 ? (r[codeCol]      ?? '').trim() : '',
+    };
+    if (priceMonthCol !== -1 && r[priceMonthCol]) {
+      const p = parsePrice(r[priceMonthCol]);
+      if (p > 0) villa.monthlyPrice = p;
+    }
+    villas.push(villa);
   }
   return villas;
 };

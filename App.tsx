@@ -290,7 +290,14 @@ const App: React.FC = () => {
       // Check sheet villas first (live data), fall back to local templates
       const sv = sheetVillas.find(v => v.name === selected);
       if (sv) {
-        setData(prev => ({ ...prev, villaName: sv.name, villaAddress: sv.address, bedrooms: sv.bedrooms, propertyCode: sv.propertyCode || prev.propertyCode }));
+        setData(prev => ({
+          ...prev,
+          villaName:    sv.name,
+          villaAddress: sv.address,
+          bedrooms:     sv.bedrooms,
+          propertyCode: sv.propertyCode || prev.propertyCode,
+          ...(sv.monthlyPrice ? { monthlyPrice: sv.monthlyPrice } : {}),
+        }));
         return;
       }
       const t = VILLA_TEMPLATES.find(v => v.name === selected);
