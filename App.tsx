@@ -337,16 +337,16 @@ const App: React.FC = () => {
         <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
 
           {/* ── SMART AUTO-FILL PANEL ── */}
-          <div className="bg-slate-900 rounded-2xl shadow-xl overflow-hidden mb-6 border border-slate-700">
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6 border border-emerald-100">
             <button
               onClick={() => setAutoFillOpen(o => !o)}
-              className="w-full px-5 py-4 flex items-start justify-between gap-3 text-left hover:bg-slate-800/60 transition"
+              className="w-full px-5 py-4 flex items-start justify-between gap-3 text-left hover:bg-emerald-50/60 transition"
             >
               <div className="flex items-start gap-3">
-                <span className="text-yellow-400 text-xl mt-0.5">⚡</span>
+                <span className="text-yellow-500 text-xl mt-0.5">⚡</span>
                 <div>
-                  <p className="font-bold text-white text-base">Smart Auto-Fill</p>
-                  <p className="text-slate-400 text-sm mt-0.5">
+                  <p className="font-bold text-slate-800 text-base">Smart Auto-Fill</p>
+                  <p className="text-slate-500 text-sm mt-0.5">
                     Paste WhatsApp message, email, or any raw text — system detects &amp; fills the form
                   </p>
                 </div>
@@ -355,35 +355,37 @@ const App: React.FC = () => {
             </button>
 
             {autoFillOpen && (
-              <div className="px-5 pb-5 space-y-3">
-                <textarea
-                  value={autoFillText}
-                  onChange={e => setAutoFillText(e.target.value)}
-                  rows={6}
-                  className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-sm text-slate-200 font-mono placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition resize-y"
-                  placeholder={`Paste anything here, e.g.:\n\nGuest: John Smith\nNationality: British\nPassport: AB123456\nPhone: +44 7911 123456\nCheck-in: 1 April 2025\nCheck-out: 30 April 2025\nVilla: Villa Serenity\nMonthly: 30000000`}
-                />
+              <div className="px-5 pb-5 space-y-3 border-t border-emerald-100">
+                <div className="pt-3">
+                  <textarea
+                    value={autoFillText}
+                    onChange={e => setAutoFillText(e.target.value)}
+                    rows={6}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 font-mono placeholder-slate-400 focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 outline-none transition resize-y"
+                    placeholder={`Paste anything here, e.g.:\n\nGuest: John Smith\nNationality: British\nPassport: AB123456\nPhone: +44 7911 123456\nCheck-in: 1 April 2025\nCheck-out: 30 April 2025\nVilla: Villa Serenity\nMonthly: 30000000`}
+                  />
+                </div>
                 <div className="flex items-center gap-3 flex-wrap">
                   <button
                     onClick={handleAutoFill}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold text-sm rounded-xl transition active:scale-95"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition active:scale-95"
                   >
-                    <span className="text-yellow-400">⚡</span> Parse &amp; Auto-Fill Form
+                    <span>⚡</span> Parse &amp; Auto-Fill Form
                   </button>
                   {autoFillMsg && (
-                    <span className={`text-sm font-semibold ${autoFillMsg.startsWith('✓') ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    <span className={`text-sm font-semibold ${autoFillMsg.startsWith('✓') ? 'text-emerald-600' : 'text-amber-500'}`}>
                       {autoFillMsg}
                     </span>
                   )}
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs text-slate-400">
-                    <span className="text-yellow-400">💡</span>{' '}
-                    <strong className="text-slate-300">Supported labels:</strong>{' '}
+                  <p className="text-xs text-slate-500">
+                    <span className="text-yellow-500">💡</span>{' '}
+                    <strong className="text-slate-600">Supported labels:</strong>{' '}
                     Name · Passport · Nationality · Phone · Check in/out · Villa · Price · Monthly · Deposit · Owner · Agent · PIC · Email
                   </p>
-                  <p className="text-xs text-slate-400">
-                    <span className="text-yellow-400">💡</span> Works with casual messages too — just paste and try!
+                  <p className="text-xs text-slate-500">
+                    <span className="text-yellow-500">💡</span> Works with casual messages too — just paste and try!
                   </p>
                 </div>
               </div>
