@@ -669,11 +669,8 @@ const App: React.FC = () => {
             )}
           </div>
 
-          {/* ── Two-Column Layout ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-            {/* ── LEFT: Form Sections ── */}
-            <div className="lg:col-span-2 space-y-5">
+          {/* ── Form Sections ── */}
+          <div className="space-y-5">
 
               {/* ── SECTION 1: Villa Details ── */}
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -1577,14 +1574,8 @@ const App: React.FC = () => {
                 )}
               </section>
 
-            </div>{/* end left column */}
-
-            {/* ── RIGHT: Sticky Generate Card ── */}
-            <div className="lg:col-span-1">
-              <div className="sticky top-24 space-y-4">
-
-                {/* Generate Contract Card */}
-                <div className="bg-gradient-to-b from-emerald-600 to-emerald-700 rounded-2xl shadow-xl overflow-hidden text-white">
+            {/* ── BOTTOM: Generate Contract ── */}
+            <div className="bg-gradient-to-b from-emerald-600 to-emerald-700 rounded-2xl shadow-xl overflow-hidden text-white">
                   <div className="px-5 py-4 bg-emerald-500 border-b border-emerald-600/60 flex items-center gap-2.5">
                     <div className="w-8 h-8 bg-emerald-400/30 rounded-xl flex items-center justify-center flex-shrink-0">
                       <FileDown className="w-4 h-4" />
@@ -1729,11 +1720,8 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Template Guide */}
-                <TemplateGuide />
-
-              </div>
-            </div>
+            {/* Template Guide */}
+            <TemplateGuide />
 
           </div>
         </main>
