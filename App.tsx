@@ -508,12 +508,12 @@ const App: React.FC = () => {
   const SectionHeader = ({ num, icon, title, right }: {
     num: number; icon: React.ReactNode; title: string; right?: React.ReactNode;
   }) => (
-    <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 to-white flex items-center justify-between gap-3">
+    <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 to-white flex flex-wrap items-center justify-between gap-2">
       <div className="flex items-center gap-3">
         <span className="w-7 h-7 bg-emerald-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">{num}</span>
         <h2 className="font-bold text-slate-800 flex items-center gap-2">{icon} {title}</h2>
       </div>
-      {right}
+      {right && <div className="flex-shrink-0">{right}</div>}
     </div>
   );
 
@@ -689,7 +689,7 @@ const App: React.FC = () => {
                     </div>
                   }
                 />
-                <div className="px-6 py-5 space-y-4">
+                <div className="px-4 sm:px-6 py-5 space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="sm:col-span-2">
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">Villa Name <span className="text-red-400">*</span></label>
@@ -730,7 +730,7 @@ const App: React.FC = () => {
                     </button>
                   ) : undefined}
                 />
-                <div className="px-6 py-5 space-y-5">
+                <div className="px-4 sm:px-6 py-5 space-y-5">
                   {data.guests.map((guest, index) => (
                     <div key={guest.id} className="border border-emerald-100 rounded-2xl overflow-hidden">
                       <div className="px-4 py-2.5 bg-emerald-50 flex items-center justify-between border-b border-emerald-100">
@@ -776,7 +776,7 @@ const App: React.FC = () => {
               {/* ── SECTION 3: Stay Details ── */}
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <SectionHeader num={3} icon={<Calendar className="w-4 h-4 text-emerald-600" />} title="Stay Details" />
-                <div className="px-6 py-5 space-y-4">
+                <div className="px-4 sm:px-6 py-5 space-y-4">
 
                   {/* 1 — Check-in Date (first, so user sets it before clicking a pill) */}
                   <div>
@@ -876,7 +876,7 @@ const App: React.FC = () => {
               {/* ── SECTION 4: Financials ── */}
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <SectionHeader num={4} icon={<CreditCard className="w-4 h-4 text-emerald-600" />} title="Financials" />
-                <div className="px-6 py-5 space-y-4">
+                <div className="px-4 sm:px-6 py-5 space-y-4">
 
                   {/* ① Currency Selector */}
                   <div>
@@ -1057,8 +1057,8 @@ const App: React.FC = () => {
                         <label className="block text-xs font-semibold text-slate-600 mb-1.5">Commission Source</label>
                         <div className="grid grid-cols-2 gap-2">
                           {([
-                            { value: 'from_owner',   label: '🏠 From Owner',        desc: 'Owner pays TVM' },
-                            { value: 'split_agent',  label: '🤝 Split with Agent',  desc: "TVM's % of agent's fee" },
+                            { value: 'from_owner',   label: '🏠 From Owner',        desc: 'Owner pays us directly' },
+                            { value: 'split_agent',  label: '🤝 Split with Agent',  desc: "Our share of agent's fee" },
                           ] as { value: 'from_owner' | 'split_agent'; label: string; desc: string }[]).map(opt => (
                             <button key={opt.value} onClick={() => handleInputChange('commissionSource', opt.value)}
                               className={`py-2.5 px-3 rounded-xl text-left border-2 transition ${
@@ -1096,10 +1096,10 @@ const App: React.FC = () => {
 
                       {/* ── FROM OWNER fields ── */}
                       {data.commissionSource === 'from_owner' && (
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {data.commissionType !== 'fixed' && (
                             <div>
-                              <label className="block text-xs font-semibold text-slate-600 mb-1">TVM Rate (%)</label>
+                              <label className="block text-xs font-semibold text-slate-600 mb-1">Our Rate (%)</label>
                               <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
                                 <input type="number" min={0} max={100} step={0.5}
                                   value={data.commissionPercent || ''}
@@ -1112,7 +1112,7 @@ const App: React.FC = () => {
                           )}
                           <div>
                             <label className="block text-xs font-semibold text-slate-600 mb-1">
-                              TVM Amount ({currencySymbol}){data.commissionType !== 'fixed' && <span className="text-slate-400 font-normal"> — auto</span>}
+                              Our Amount ({currencySymbol}){data.commissionType !== 'fixed' && <span className="text-slate-400 font-normal"> — auto</span>}
                             </label>
                             <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
                               <span className="px-2 py-2 text-slate-500 font-bold text-xs bg-slate-50 border-r border-slate-200">{currencySymbol}</span>
@@ -1131,7 +1131,7 @@ const App: React.FC = () => {
                       {data.commissionSource === 'split_agent' && (
                         <div className="space-y-3">
                           {/* Agent commission */}
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {data.commissionType !== 'fixed' && (
                               <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1">Agent Commission (%)</label>
@@ -1160,10 +1160,10 @@ const App: React.FC = () => {
                               </div>
                             </div>
                           </div>
-                          {/* TVM split */}
-                          <div className="grid grid-cols-2 gap-3">
+                          {/* Our split */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                              <label className="block text-xs font-semibold text-slate-600 mb-1">TVM Split (%)</label>
+                              <label className="block text-xs font-semibold text-slate-600 mb-1">Our Split (%)</label>
                               <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
                                 <input type="number" min={0} max={100} step={5}
                                   value={data.tvmSplitPercent || ''}
@@ -1174,7 +1174,7 @@ const App: React.FC = () => {
                               </div>
                             </div>
                             <div>
-                              <label className="block text-xs font-semibold text-slate-600 mb-1">TVM Receives — auto</label>
+                              <label className="block text-xs font-semibold text-slate-600 mb-1">We Receive — auto</label>
                               <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden bg-slate-50">
                                 <span className="px-2 py-2 text-slate-500 font-bold text-xs bg-slate-100 border-r border-slate-200">{currencySymbol}</span>
                                 <input type="number" readOnly value={data.commissionAmount || ''}
@@ -1197,7 +1197,7 @@ const App: React.FC = () => {
                           )}
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-amber-700">
-                              {data.commissionSource === 'split_agent' ? 'TVM receives:' : 'Owner pays TVM:'}
+                              {data.commissionSource === 'split_agent' ? 'We receive:' : 'Our commission:'}
                             </span>
                             <span className="text-xs font-bold text-amber-800 font-mono">{formatCurrencyDisplay(data.commissionAmount)}</span>
                           </div>
@@ -1227,7 +1227,7 @@ const App: React.FC = () => {
               {/* ── SECTION 5: Inclusions ── */}
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <SectionHeader num={5} icon={<ListTodo className="w-4 h-4 text-emerald-600" />} title="Inclusions" />
-                <div className="px-6 py-5">
+                <div className="px-4 sm:px-6 py-5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     {INCLUSIONS.map(({ key, label, emoji }) => {
                       const checked = data.inclusions[key];
@@ -1260,7 +1260,7 @@ const App: React.FC = () => {
 
               {/* ── SECTION 6: Lessor / Property Owner ── */}
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-amber-50/80 to-white flex items-center justify-between gap-3">
+                <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-amber-50/80 to-white flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <span className="w-7 h-7 bg-amber-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">6</span>
                     <div>
@@ -1279,7 +1279,7 @@ const App: React.FC = () => {
                 </div>
 
                 {data.lessor.enabled && (
-                  <div className="px-6 py-5 space-y-4">
+                  <div className="px-4 sm:px-6 py-5 space-y-4">
                     {/* Saved contacts */}
                     {savedOwners.length > 0 && (
                       <div>
@@ -1331,7 +1331,7 @@ const App: React.FC = () => {
               {/* ── SECTION 7: Agent / Partner ── */}
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 {/* Purple header */}
-                <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-purple-50/80 to-white flex items-center justify-between gap-3">
+                <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-purple-50/80 to-white flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <span className="w-7 h-7 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">7</span>
                     <div>
@@ -1350,7 +1350,7 @@ const App: React.FC = () => {
                 </div>
 
                 {data.agent.enabled && (
-                  <div className="px-6 py-5 space-y-6">
+                  <div className="px-4 sm:px-6 py-5 space-y-6">
 
                     {/* 📂 Saved Agents */}
                     {savedAgents.length > 0 && (
