@@ -26,7 +26,7 @@ export const Section7Agent: React.FC<Props> = ({
     {/* Purple header */}
     <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-purple-50/80 to-white flex items-center justify-between gap-3">
       <div className="flex items-center gap-3">
-        <span className="w-7 h-7 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">7</span>
+        <span className="w-7 h-7 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">8</span>
         <div>
           <h2 className="font-bold text-slate-800 flex items-center gap-2">
             <Handshake className="w-4 h-4 text-purple-600" /> Agent / Partner

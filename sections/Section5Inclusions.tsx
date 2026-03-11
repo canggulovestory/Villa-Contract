@@ -21,7 +21,7 @@ interface Props {
 
 export const Section5Inclusions: React.FC<Props> = ({ data, handleInputChange, onInclusionChange }) => (
   <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-    <SectionHeader num={5} icon={<ListTodo className="w-4 h-4 text-emerald-600" />} title="Inclusions" />
+    <SectionHeader num={6} icon={<ListTodo className="w-4 h-4 text-emerald-600" />} title="Inclusions" />
     <div className="px-4 sm:px-6 py-5 space-y-2.5">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         {INCLUSIONS.map(({ key, label, emoji }) => {

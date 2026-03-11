@@ -25,6 +25,7 @@ import { Section1Villa }       from './sections/Section1Villa';
 import { Section2Guests }      from './sections/Section2Guests';
 import { Section3Stay }        from './sections/Section3Stay';
 import { Section4Financials }  from './sections/Section4Financials';
+import { Section5Commission }  from './sections/Section5Commission';
 import { Section5Inclusions }  from './sections/Section5Inclusions';
 import { Section6Owner }       from './sections/Section6Owner';
 import { Section7Agent }       from './sections/Section7Agent';
@@ -682,6 +683,11 @@ const App: React.FC = () => {
                 onSetIsPriceManuallySet={setIsPriceManuallySet}
               />
 
+              <Section5Commission
+                data={data}
+                handleInputChange={handleInputChange}
+              />
+
               <Section5Inclusions
                 data={data}
                 handleInputChange={handleInputChange}
@@ -804,13 +810,16 @@ const App: React.FC = () => {
 
                     {/* Action Buttons */}
                     <div className="space-y-2">
-                      <button onClick={handleDownload3rdParty}
-                        disabled={isGenerating || (!driveConnected && !autoTemplate)}
-                        title={!driveConnected && !autoTemplate ? 'Connect Google Drive to use this template' : ''}
-                        className="w-full py-3 bg-white hover:bg-emerald-50 disabled:bg-white/30 disabled:cursor-not-allowed text-emerald-800 disabled:text-emerald-600/40 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition shadow-sm active:scale-95">
-                        <Zap className="w-4 h-4 text-yellow-500" />
-                        {isGenerating ? 'Generating…' : '3rd Party Contract'}
-                      </button>
+                      <div>
+                        <button onClick={handleDownload3rdParty}
+                          disabled={isGenerating || (!driveConnected && !autoTemplate)}
+                          title={!driveConnected && !autoTemplate ? 'Connect Google Drive to use this template' : 'Agent ↔ TVM agreement for bookings sourced by an external agent'}
+                          className="w-full py-3 bg-white hover:bg-emerald-50 disabled:bg-white/30 disabled:cursor-not-allowed text-emerald-800 disabled:text-emerald-600/40 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition shadow-sm active:scale-95">
+                          <Zap className="w-4 h-4 text-yellow-500" />
+                          {isGenerating ? 'Generating…' : '3rd Party Contract'}
+                        </button>
+                        <p className="text-xs text-center text-emerald-700/50 mt-1">For agent-sourced bookings — TVM ↔ Agent agreement</p>
+                      </div>
                       <button onClick={handleDownload}
                         disabled={isGenerating || (!driveConnected && !autoDirectTemplate && !localTemplateFile)}
                         title={!driveConnected && !autoDirectTemplate && !localTemplateFile ? 'Connect Google Drive to use this template' : ''}
