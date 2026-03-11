@@ -197,6 +197,22 @@ const App: React.FC = () => {
     }
   }, [data.monthlyPrice, computedData.numberOfNights]);
 
+  // ─── Reset stale commission amounts when switching source mode ───────────
+  const prevCommissionSource = useRef(data.commissionSource);
+  useEffect(() => {
+    if (prevCommissionSource.current === data.commissionSource) return;
+    prevCommissionSource.current = data.commissionSource;
+    if (data.commissionSource === 'from_owner') {
+      // Switching away from split_agent — wipe agent and our-share amounts
+      // so the from_owner fields start clean (commissionPercent still set)
+      setData(prev => ({ ...prev, commissionAmount: 0, agentCommissionAmount: 0 }));
+    } else {
+      // Switching to split_agent — wipe from_owner commissionAmount so it
+      // doesn't linger in the "We Receive" auto field
+      setData(prev => ({ ...prev, commissionAmount: 0 }));
+    }
+  }, [data.commissionSource]);
+
   // ─── Commission auto-calc ─────────────────────────────────────────────────
   useEffect(() => {
     const base = data.commissionType === 'percent_monthly' ? data.monthlyPrice : data.totalPrice;
@@ -934,33 +950,43 @@ const App: React.FC = () => {
                       {isPriceManuallySet && <p className="text-xs text-amber-600 mt-1">⚠ Manual override active</p>}
                     </div>
                     {/* Security Deposit — editable with Reset to 10% */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-semibold text-slate-700">Security Deposit</label>
-                        {data.securityDepositOverride > 0 && (
-                          <button onClick={() => handleInputChange('securityDepositOverride', 0)}
-                            className="text-xs text-blue-500 hover:text-blue-700 font-semibold transition">
-                            Reset to 10%
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
-                        <span className="px-3 py-2.5 text-slate-500 font-bold text-sm bg-slate-50 border-r border-slate-200 flex-shrink-0">{currencySymbol}</span>
-                        {isIDR ? (
-                          <input type="text" inputMode="numeric"
-                            value={computedData.securityDeposit > 0 ? computedData.securityDeposit.toLocaleString('id-ID') : ''}
-                            onChange={e => handleInputChange('securityDepositOverride', parseIDRInput(e.target.value))}
-                            className="flex-1 px-3 py-2.5 text-sm font-mono outline-none transition"
-                            placeholder="Auto: 10% of total" />
-                        ) : (
-                          <input type="number" value={computedData.securityDeposit || ''}
-                            onChange={e => handleInputChange('securityDepositOverride', parseFloat(e.target.value) || 0)}
-                            className="flex-1 px-3 py-2.5 text-sm font-mono outline-none transition"
-                            placeholder="Auto: 10% of total" />
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-400 mt-1">Auto-set to 10% — override as needed</p>
-                    </div>
+                    {(() => {
+                      const autoDeposit = Math.round(data.totalPrice * 0.10);
+                      const isStale = data.securityDepositOverride > 0 && data.totalPrice > 0 &&
+                        Math.abs(data.securityDepositOverride - autoDeposit) > 1;
+                      return (
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="block text-sm font-semibold text-slate-700">Security Deposit</label>
+                            {data.securityDepositOverride > 0 && (
+                              <button onClick={() => handleInputChange('securityDepositOverride', 0)}
+                                className={`text-xs font-semibold transition flex items-center gap-1 ${isStale ? 'text-amber-600 hover:text-amber-800' : 'text-blue-500 hover:text-blue-700'}`}>
+                                {isStale && <span>⚠</span>} Reset to 10%
+                              </button>
+                            )}
+                          </div>
+                          <div className={`flex items-center border rounded-xl overflow-hidden ${isStale ? 'border-amber-300' : 'border-slate-300'}`}>
+                            <span className="px-3 py-2.5 text-slate-500 font-bold text-sm bg-slate-50 border-r border-slate-200 flex-shrink-0">{currencySymbol}</span>
+                            {isIDR ? (
+                              <input type="text" inputMode="numeric"
+                                value={computedData.securityDeposit > 0 ? computedData.securityDeposit.toLocaleString('id-ID') : ''}
+                                onChange={e => handleInputChange('securityDepositOverride', parseIDRInput(e.target.value))}
+                                className="flex-1 px-3 py-2.5 text-sm font-mono outline-none transition"
+                                placeholder="Auto: 10% of total" />
+                            ) : (
+                              <input type="number" value={computedData.securityDeposit || ''}
+                                onChange={e => handleInputChange('securityDepositOverride', parseFloat(e.target.value) || 0)}
+                                className="flex-1 px-3 py-2.5 text-sm font-mono outline-none transition"
+                                placeholder="Auto: 10% of total" />
+                            )}
+                          </div>
+                          {isStale
+                            ? <p className="text-xs text-amber-600 mt-1 font-semibold">⚠ Total price changed — deposit may be outdated (10% = {formatCurrencyDisplay(autoDeposit)})</p>
+                            : <p className="text-xs text-slate-400 mt-1">Auto-set to 10% — override as needed</p>
+                          }
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* ④ Payment Terms */}
