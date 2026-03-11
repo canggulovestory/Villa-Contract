@@ -136,7 +136,7 @@ const App: React.FC = () => {
   const [autoFillText, setAutoFillText]           = useState('');
   const [autoFillOpen, setAutoFillOpen]           = useState(true);
   const [autoFillMsg, setAutoFillMsg]             = useState('');
-  const [commissionOpen, setCommissionOpen]       = useState(false);
+  // commission section is now always-visible; no open/close state needed
   const [activeDurationPill, setActiveDurationPill] = useState<string>('');
   const [customWeeks, setCustomWeeks]               = useState<string>('2');
   const [savedOwners, setSavedOwners]             = useState<LessorData[]>([]);
@@ -199,14 +199,29 @@ const App: React.FC = () => {
 
   // ─── Commission auto-calc ─────────────────────────────────────────────────
   useEffect(() => {
-    if (data.commissionType === 'fixed') return; // fixed = manual entry
-    const base = data.commissionType === 'percent_monthly'
-      ? data.monthlyPrice
-      : data.totalPrice;
+    const base = data.commissionType === 'percent_monthly' ? data.monthlyPrice : data.totalPrice;
+
+    if (data.commissionSource === 'split_agent') {
+      // Step 1: auto-calc agent's total commission amount
+      if (data.commissionType !== 'fixed' && data.agentCommissionPercent > 0 && base > 0) {
+        const agentAmt = Math.round(base * data.agentCommissionPercent / 100);
+        // Step 2: TVM's share = agent amount × TVM split %
+        const tvmAmt = data.tvmSplitPercent > 0 ? Math.round(agentAmt * data.tvmSplitPercent / 100) : 0;
+        setData(prev => ({ ...prev, agentCommissionAmount: agentAmt, commissionAmount: tvmAmt }));
+      }
+      return;
+    }
+
+    // from_owner mode
+    if (data.commissionType === 'fixed') return;
     if (data.commissionPercent > 0 && base > 0) {
       setData(prev => ({ ...prev, commissionAmount: Math.round(base * prev.commissionPercent / 100) }));
     }
-  }, [data.commissionPercent, data.commissionType, data.totalPrice, data.monthlyPrice]);
+  }, [
+    data.commissionSource, data.commissionType,
+    data.commissionPercent, data.agentCommissionPercent, data.tvmSplitPercent,
+    data.totalPrice, data.monthlyPrice,
+  ]);
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
   const handleInputChange = <K extends keyof ContractData>(field: K, value: ContractData[K]) => {
@@ -1028,42 +1043,66 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* ⑥ Commission — collapsible amber panel */}
+                  {/* ⑥ Commission / Agent Fee — always visible, amber section */}
                   <div className="border border-amber-200 rounded-xl overflow-hidden">
-                    <button onClick={() => setCommissionOpen(o => !o)}
-                      className="w-full px-4 py-3 flex items-center justify-between bg-amber-50 hover:bg-amber-100/60 transition text-left">
+                    {/* Header */}
+                    <div className="px-4 py-3 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-amber-500 text-base">💰</span>
                         <span className="font-bold text-amber-800 text-sm">Commission / Agent Fee</span>
-                        <span className="text-xs bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full border border-amber-200">Owner copy only</span>
                       </div>
-                      <span className="text-amber-500 text-sm">{commissionOpen ? '∧' : '∨'}</span>
-                    </button>
-                    {commissionOpen && (
-                      <div className="px-4 pb-4 pt-3 bg-white space-y-3">
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-600 mb-1.5">Commission Basis</label>
-                          <div className="grid grid-cols-3 gap-2">
-                            {([
-                              { value: 'percent_total',   label: '% of Total' },
-                              { value: 'percent_monthly', label: '% of Monthly' },
-                              { value: 'fixed',           label: 'Fixed Amount' },
-                            ] as { value: CommissionType; label: string }[]).map(opt => (
-                              <button key={opt.value} onClick={() => handleInputChange('commissionType', opt.value)}
-                                className={`py-2 text-xs font-semibold rounded-xl border-2 transition ${
-                                  data.commissionType === opt.value
-                                    ? 'bg-amber-500 border-amber-500 text-white'
-                                    : 'bg-white border-slate-200 text-slate-600 hover:border-amber-300'
-                                }`}>
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
+                      <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 font-semibold">Owner copy only</span>
+                    </div>
+
+                    <div className="px-4 py-4 bg-white space-y-3">
+                      {/* Source pills */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Commission Source</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([
+                            { value: 'from_owner',   label: '🏠 From Owner',        desc: 'Owner pays TVM' },
+                            { value: 'split_agent',  label: '🤝 Split with Agent',  desc: "TVM's % of agent's fee" },
+                          ] as { value: 'from_owner' | 'split_agent'; label: string; desc: string }[]).map(opt => (
+                            <button key={opt.value} onClick={() => handleInputChange('commissionSource', opt.value)}
+                              className={`py-2.5 px-3 rounded-xl text-left border-2 transition ${
+                                data.commissionSource === opt.value
+                                  ? 'bg-amber-500 border-amber-500 text-white'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:border-amber-300'
+                              }`}>
+                              <p className="text-xs font-bold">{opt.label}</p>
+                              <p className={`text-xs mt-0.5 ${data.commissionSource === opt.value ? 'text-amber-100' : 'text-slate-400'}`}>{opt.desc}</p>
+                            </button>
+                          ))}
                         </div>
+                      </div>
+
+                      {/* Commission Basis */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Commission Basis</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {([
+                            { value: 'percent_total',   label: '% of Total' },
+                            { value: 'percent_monthly', label: '% of Monthly' },
+                            { value: 'fixed',           label: 'Fixed Amount' },
+                          ] as { value: CommissionType; label: string }[]).map(opt => (
+                            <button key={opt.value} onClick={() => handleInputChange('commissionType', opt.value)}
+                              className={`py-2 text-xs font-semibold rounded-xl border-2 transition ${
+                                data.commissionType === opt.value
+                                  ? 'bg-amber-500 border-amber-500 text-white'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:border-amber-300'
+                              }`}>
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* ── FROM OWNER fields ── */}
+                      {data.commissionSource === 'from_owner' && (
                         <div className="grid grid-cols-2 gap-3">
                           {data.commissionType !== 'fixed' && (
                             <div>
-                              <label className="block text-xs font-semibold text-slate-600 mb-1">Rate (%)</label>
+                              <label className="block text-xs font-semibold text-slate-600 mb-1">TVM Rate (%)</label>
                               <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
                                 <input type="number" min={0} max={100} step={0.5}
                                   value={data.commissionPercent || ''}
@@ -1076,7 +1115,7 @@ const App: React.FC = () => {
                           )}
                           <div>
                             <label className="block text-xs font-semibold text-slate-600 mb-1">
-                              Amount ({currencySymbol}) {data.commissionType !== 'fixed' && <span className="text-slate-400 font-normal">— auto</span>}
+                              TVM Amount ({currencySymbol}){data.commissionType !== 'fixed' && <span className="text-slate-400 font-normal"> — auto</span>}
                             </label>
                             <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
                               <span className="px-2 py-2 text-slate-500 font-bold text-xs bg-slate-50 border-r border-slate-200">{currencySymbol}</span>
@@ -1084,31 +1123,105 @@ const App: React.FC = () => {
                                 value={data.commissionAmount || ''}
                                 readOnly={data.commissionType !== 'fixed'}
                                 onChange={e => data.commissionType === 'fixed' ? handleInputChange('commissionAmount', parseFloat(e.target.value) || 0) : undefined}
-                                className={`flex-1 px-3 py-2 text-sm font-mono outline-none ${data.commissionType !== 'fixed' ? 'bg-slate-50 text-slate-500' : ''}`}
+                                className={`flex-1 px-3 py-2 text-sm font-mono outline-none ${data.commissionType !== 'fixed' ? 'bg-slate-50 text-slate-400' : ''}`}
                                 placeholder="0" />
                             </div>
-                            {data.commissionAmount > 0 && (
-                              <p className="text-xs text-amber-600 mt-1 font-semibold">{formatCurrencyDisplay(data.commissionAmount)}</p>
-                            )}
                           </div>
                         </div>
-                        {data.commissionAmount > 0 && data.totalPrice > 0 && (
-                          <div className="bg-amber-50 rounded-xl px-4 py-2.5 flex items-center justify-between border border-amber-200">
-                            <span className="text-xs font-bold text-amber-700">Net to Owner:</span>
+                      )}
+
+                      {/* ── SPLIT WITH AGENT fields ── */}
+                      {data.commissionSource === 'split_agent' && (
+                        <div className="space-y-3">
+                          {/* Agent commission */}
+                          <div className="grid grid-cols-2 gap-3">
+                            {data.commissionType !== 'fixed' && (
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Agent Commission (%)</label>
+                                <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
+                                  <input type="number" min={0} max={100} step={0.5}
+                                    value={data.agentCommissionPercent || ''}
+                                    onChange={e => handleInputChange('agentCommissionPercent', parseFloat(e.target.value) || 0)}
+                                    className="flex-1 px-3 py-2 text-sm font-mono outline-none"
+                                    placeholder="e.g. 15" />
+                                  <span className="px-3 py-2 text-slate-500 font-bold text-sm bg-slate-50 border-l border-slate-200">%</span>
+                                </div>
+                              </div>
+                            )}
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                                Agent Total ({currencySymbol}){data.commissionType !== 'fixed' && <span className="text-slate-400 font-normal"> — auto</span>}
+                              </label>
+                              <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
+                                <span className="px-2 py-2 text-slate-500 font-bold text-xs bg-slate-50 border-r border-slate-200">{currencySymbol}</span>
+                                <input type="number" min={0}
+                                  value={data.agentCommissionAmount || ''}
+                                  readOnly={data.commissionType !== 'fixed'}
+                                  onChange={e => data.commissionType === 'fixed' ? handleInputChange('agentCommissionAmount', parseFloat(e.target.value) || 0) : undefined}
+                                  className={`flex-1 px-3 py-2 text-sm font-mono outline-none ${data.commissionType !== 'fixed' ? 'bg-slate-50 text-slate-400' : ''}`}
+                                  placeholder="0" />
+                              </div>
+                            </div>
+                          </div>
+                          {/* TVM split */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-600 mb-1">TVM Split (%)</label>
+                              <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
+                                <input type="number" min={0} max={100} step={5}
+                                  value={data.tvmSplitPercent || ''}
+                                  onChange={e => handleInputChange('tvmSplitPercent', parseFloat(e.target.value) || 0)}
+                                  className="flex-1 px-3 py-2 text-sm font-mono outline-none"
+                                  placeholder="e.g. 50" />
+                                <span className="px-3 py-2 text-slate-500 font-bold text-sm bg-slate-50 border-l border-slate-200">%</span>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-600 mb-1">TVM Receives — auto</label>
+                              <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden bg-slate-50">
+                                <span className="px-2 py-2 text-slate-500 font-bold text-xs bg-slate-100 border-r border-slate-200">{currencySymbol}</span>
+                                <input type="number" readOnly value={data.commissionAmount || ''}
+                                  className="flex-1 px-3 py-2 text-sm font-mono outline-none bg-slate-50 text-slate-500"
+                                  placeholder="0" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Summary box */}
+                      {data.commissionAmount > 0 && data.totalPrice > 0 && (
+                        <div className="bg-amber-50 rounded-xl px-4 py-3 border border-amber-200 space-y-1.5">
+                          {data.commissionSource === 'split_agent' && data.agentCommissionAmount > 0 && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-amber-700">Agent commission:</span>
+                              <span className="text-xs font-bold text-amber-800 font-mono">{formatCurrencyDisplay(data.agentCommissionAmount)}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-amber-700">
+                              {data.commissionSource === 'split_agent' ? 'TVM receives:' : 'Owner pays TVM:'}
+                            </span>
+                            <span className="text-xs font-bold text-amber-800 font-mono">{formatCurrencyDisplay(data.commissionAmount)}</span>
+                          </div>
+                          <div className="flex items-center justify-between border-t border-amber-200 pt-1.5">
+                            <span className="text-xs font-bold text-amber-800">Net to Owner:</span>
                             <span className="text-sm font-bold text-amber-900 font-mono">
-                              {formatCurrencyDisplay(data.totalPrice - data.commissionAmount)}
+                              {formatCurrencyDisplay(data.totalPrice - (data.commissionSource === 'split_agent' ? data.agentCommissionAmount : data.commissionAmount))}
                             </span>
                           </div>
-                        )}
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-600 mb-1">Payment Notes (optional)</label>
-                          <input type="text" value={data.commissionNotes}
-                            onChange={e => handleInputChange('commissionNotes', e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-amber-400 outline-none transition"
-                            placeholder="e.g. Paid within 7 days of check-in" />
                         </div>
+                      )}
+
+                      {/* Notes */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Payment Notes (optional)</label>
+                        <input type="text" value={data.commissionNotes}
+                          onChange={e => handleInputChange('commissionNotes', e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-amber-400 outline-none transition"
+                          placeholder="e.g. Paid within 7 days of check-in" />
                       </div>
-                    )}
+                    </div>
                   </div>
 
                 </div>

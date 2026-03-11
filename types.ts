@@ -105,10 +105,15 @@ export interface ContractData {
   propertyCode: string;          // e.g. "VS-001", maps → {{propertyCode}} in template
 
   // Commission (for OWNER copy)
+  commissionSource: 'from_owner' | 'split_agent'; // who pays TVM
   commissionType: CommissionType;    // basis for commission calculation
-  commissionPercent: number;         // e.g. 15 = 15%
-  commissionAmount: number;          // calculated or manually entered
+  commissionPercent: number;         // % used when source = from_owner
+  commissionAmount: number;          // TVM's final take (always auto or manual)
   commissionNotes: string;           // e.g. "Paid within 7 days of check-in"
+  // Split-with-Agent extras
+  agentCommissionPercent: number;    // agent's % of deal (split_agent mode)
+  agentCommissionAmount: number;     // auto-calculated agent $ amount
+  tvmSplitPercent: number;           // TVM's % of agent commission
 
   // Contract copy type
   copyType: CopyType;
@@ -210,10 +215,14 @@ export const INITIAL_DATA: ContractData = {
   followingPaymentAmount: '',
   followingPaymentDueDate: '',
   showFollowingPayment: false,
+  commissionSource: 'from_owner',
   commissionType: 'percent_total',
   commissionPercent: 0,
   commissionAmount: 0,
   commissionNotes: '',
+  agentCommissionPercent: 0,
+  agentCommissionAmount: 0,
+  tvmSplitPercent: 50,
   copyType: 'CLIENT' as CopyType,
   lessor: { ...INITIAL_LESSOR },
   agent: { ...INITIAL_AGENT },

@@ -217,14 +217,25 @@ export const generateDocument = async (
     isAgentCopy:  data.copyType === 'AGENT',
 
     // Commission — only injected on OWNER copy
-    commissionType:        data.commissionType,
-    commissionTypeLabel:   commissionBaseLabel,
-    commissionPercent:     data.commissionPercent,
-    commissionAmount:      isOwner ? formatIDR(data.commissionAmount) : '',
-    commissionAmountRaw:   isOwner ? data.commissionAmount : 0,
-    commissionNotes:       isOwner ? data.commissionNotes : '',
-    netOwnerAmount:        isOwner ? formatIDR(data.totalPrice - data.commissionAmount) : '',
-    netOwnerAmountRaw:     isOwner ? data.totalPrice - data.commissionAmount : 0,
+    commissionSource:        isOwner ? data.commissionSource : '',
+    commissionType:          data.commissionType,
+    commissionTypeLabel:     commissionBaseLabel,
+    commissionPercent:       data.commissionPercent,
+    commissionAmount:        isOwner ? formatAmount(data.commissionAmount) : '',
+    commissionAmountRaw:     isOwner ? data.commissionAmount : 0,
+    commissionNotes:         isOwner ? data.commissionNotes : '',
+    // Split-with-agent extras
+    agentCommissionPercent:  isOwner ? data.agentCommissionPercent : 0,
+    agentCommissionAmount:   isOwner ? formatAmount(data.agentCommissionAmount) : '',
+    agentCommissionAmountRaw: isOwner ? data.agentCommissionAmount : 0,
+    tvmSplitPercent:         isOwner ? data.tvmSplitPercent : 0,
+    // Net to owner — deducts agent commission when split_agent, TVM commission when from_owner
+    netOwnerAmount: isOwner
+      ? formatAmount(data.totalPrice - (data.commissionSource === 'split_agent' ? data.agentCommissionAmount : data.commissionAmount))
+      : '',
+    netOwnerAmountRaw: isOwner
+      ? data.totalPrice - (data.commissionSource === 'split_agent' ? data.agentCommissionAmount : data.commissionAmount)
+      : 0,
 
     // Bank details — PT The Villa Managers / CIMB NIAGA (always injected)
     bankName:        BANK.name,
