@@ -9,7 +9,7 @@ import { SECURITY_DEPOSIT_RATE } from './utils/format';
 import { VILLA_TEMPLATES } from './data/villaTemplates';
 import { generateDocument, downloadContractLocally } from './services/docService';
 import {
-  isSignedIn, signInToGoogle, signOutFromGoogle,
+  initGoogleAuth, isSignedIn, signInToGoogle, signOutFromGoogle,
   fetchTemplateFromDrive, fetchDirectTemplateFromDrive,
   saveContractToDrive, saveDealToDrive, PassportFile,
 } from './services/googleDriveService';
@@ -139,6 +139,9 @@ const App: React.FC = () => {
   const [guestPassportFiles, setGuestPassportFiles] = useState<(File | null)[]>([null]);
   const [dealFolderLink, setDealFolderLink]         = useState<string>('');
   const [agentIdFile, setAgentIdFile]               = useState<File | null>(null);
+
+  // ─── Init Google Auth (GIS tokenClient) on mount ─────────────────────────
+  useEffect(() => { initGoogleAuth(); }, []);
 
   // ─── Load saved contacts from localStorage ───────────────────────────────
   useEffect(() => {
