@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ContractData, ComputedData, INITIAL_DATA, makeNewGuest } from './types';
+import {
+  ContractData, ComputedData, CopyType, CommissionType,
+  LessorData, AgentData,
+  INITIAL_DATA, INITIAL_LESSOR, INITIAL_AGENT,
+  makeNewGuest,
+} from './types';
 import { SECURITY_DEPOSIT_RATE, formatIDR } from './utils/format';
 import { VILLA_TEMPLATES } from './data/villaTemplates';
 import { generateDocument, downloadContractLocally } from './services/docService';
@@ -13,8 +18,12 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import {
   Calendar, CreditCard, ListTodo, FileDown, Home, Users, Plus, X,
   AlertCircle, CloudUpload, Link2, LogOut, ChevronDown, Check, Zap,
-  Waves, Wifi, Trash2,
+  Trash2, Building2, UserCog, Save, FolderOpen,
 } from 'lucide-react';
+
+// ─── LocalStorage Keys ────────────────────────────────────────────────────────
+const LS_OWNERS = 'tvm_saved_owners';
+const LS_AGENTS = 'tvm_saved_agents';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MAX_GUESTS = 4;
@@ -43,7 +52,6 @@ function validateForm(data: ContractData, computed: ComputedData): string[] {
 // ─── Smart Auto-Fill Parser ───────────────────────────────────────────────────
 function parseRawText(raw: string) {
   const txt = raw;
-
   const extract = (patterns: RegExp[]): string => {
     for (const p of patterns) {
       const m = txt.match(p);
@@ -66,12 +74,10 @@ function parseRawText(raw: string) {
     };
     s = s.trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    // "1 April 2025" or "April 1, 2025"
     let m = s.match(/(\d{1,2})[\/\-\s]([a-z]+)[\/\-\s,\s]*(\d{4})/i);
     if (m) { const mo = MONTHS[m[2].toLowerCase()]; if (mo) return `${m[3]}-${mo}-${m[1].padStart(2,'0')}`; }
     m = s.match(/([a-z]+)[\/\-\s,\s]*(\d{1,2})[\/\-\s,\s]*(\d{4})/i);
     if (m) { const mo = MONTHS[m[1].toLowerCase()]; if (mo) return `${m[3]}-${mo}-${m[2].padStart(2,'0')}`; }
-    // DD/MM/YYYY
     m = s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
     if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
     return '';
@@ -99,10 +105,27 @@ function parseRawText(raw: string) {
   };
 }
 
+// ─── Toggle Switch Component ──────────────────────────────────────────────────
+const Toggle: React.FC<{ checked: boolean; onChange: () => void }> = ({ checked, onChange }) => (
+  <button
+    type="button"
+    onClick={onChange}
+    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+      checked ? 'bg-emerald-500' : 'bg-slate-300'
+    }`}
+  >
+    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+      checked ? 'translate-x-5' : 'translate-x-0'
+    }`} />
+  </button>
+);
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 const App: React.FC = () => {
   const [data, setData]                           = useState<ContractData>(INITIAL_DATA);
   const [localTemplateFile, setLocalTemplateFile] = useState<File | null>(null);
+  const [autoTemplate, setAutoTemplate]           = useState<ArrayBuffer | null>(null);
+  const [templateBanner, setTemplateBanner]       = useState('');
   const [isGenerating, setIsGenerating]           = useState(false);
   const [formErrors, setFormErrors]               = useState<string[]>([]);
   const [generateError, setGenerateError]         = useState<string>('');
@@ -112,16 +135,39 @@ const App: React.FC = () => {
   const [autoFillText, setAutoFillText]           = useState('');
   const [autoFillOpen, setAutoFillOpen]           = useState(true);
   const [autoFillMsg, setAutoFillMsg]             = useState('');
+  const [commissionOpen, setCommissionOpen]       = useState(false);
+  const [savedOwners, setSavedOwners]             = useState<LessorData[]>([]);
+  const [savedAgents, setSavedAgents]             = useState<AgentData[]>([]);
   const isPriceManuallySet                        = useRef(false);
 
+  // ─── Load saved contacts from localStorage ───────────────────────────────
+  useEffect(() => {
+    try {
+      const o = localStorage.getItem(LS_OWNERS);
+      if (o) setSavedOwners(JSON.parse(o));
+      const a = localStorage.getItem(LS_AGENTS);
+      if (a) setSavedAgents(JSON.parse(a));
+    } catch { /* ignore */ }
+  }, []);
+
+  // ─── Auto-load template from Drive on connect ────────────────────────────
+  useEffect(() => {
+    if (!driveConnected) return;
+    setTemplateBanner('loading');
+    fetchTemplateFromDrive()
+      .then(buf => { setAutoTemplate(buf); setTemplateBanner('loaded'); })
+      .catch(() => setTemplateBanner('failed'));
+  }, [driveConnected]);
+
+  // ─── computedData ────────────────────────────────────────────────────────
   const computedData: ComputedData = useMemo(() => {
     let numberOfNights = 0;
     if (data.checkInDate && data.checkOutDate) {
       const diff = new Date(data.checkOutDate).getTime() - new Date(data.checkInDate).getTime();
       numberOfNights = Math.max(0, Math.ceil(diff / 86400000));
     }
-    const numberOfMonths   = numberOfNights > 0 ? parseFloat((numberOfNights / 30).toFixed(2)) : 0;
-    const securityDeposit  = data.totalPrice * SECURITY_DEPOSIT_RATE;
+    const numberOfMonths  = numberOfNights > 0 ? parseFloat((numberOfNights / 30).toFixed(2)) : 0;
+    const securityDeposit = data.totalPrice * SECURITY_DEPOSIT_RATE;
     const active: string[] = [];
     if (data.inclusions.cleaning2x)  active.push('Cleaning 2x per week');
     if (data.inclusions.pool2x)      active.push('Pool Maintenance 2x per week');
@@ -135,6 +181,7 @@ const App: React.FC = () => {
     return { numberOfNights, numberOfMonths, securityDeposit, inclusionsList };
   }, [data.checkInDate, data.checkOutDate, data.totalPrice, data.inclusions, data.otherInclusions]);
 
+  // ─── Total price auto-calc ────────────────────────────────────────────────
   useEffect(() => {
     if (isPriceManuallySet.current) return;
     if (computedData.numberOfNights > 0 && data.monthlyPrice > 0) {
@@ -142,7 +189,18 @@ const App: React.FC = () => {
     }
   }, [data.monthlyPrice, computedData.numberOfNights]);
 
-  // ─── Handlers ───────────────────────────────────────────────────────────────
+  // ─── Commission auto-calc ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (data.commissionType === 'fixed') return; // fixed = manual entry
+    const base = data.commissionType === 'percent_monthly'
+      ? data.monthlyPrice
+      : data.totalPrice;
+    if (data.commissionPercent > 0 && base > 0) {
+      setData(prev => ({ ...prev, commissionAmount: Math.round(base * prev.commissionPercent / 100) }));
+    }
+  }, [data.commissionPercent, data.commissionType, data.totalPrice, data.monthlyPrice]);
+
+  // ─── Handlers ─────────────────────────────────────────────────────────────
   const handleInputChange = <K extends keyof ContractData>(field: K, value: ContractData[K]) => {
     setData(prev => ({ ...prev, [field]: value }));
     if (field === 'monthlyPrice' || field === 'checkInDate' || field === 'checkOutDate') {
@@ -152,6 +210,12 @@ const App: React.FC = () => {
   const handleTotalPriceChange = (value: number) => {
     isPriceManuallySet.current = true;
     setData(prev => ({ ...prev, totalPrice: value }));
+  };
+  const handleLessorChange = (field: keyof LessorData, value: string | boolean) => {
+    setData(prev => ({ ...prev, lessor: { ...prev.lessor, [field]: value } }));
+  };
+  const handleAgentChange = (field: keyof AgentData, value: string | boolean) => {
+    setData(prev => ({ ...prev, agent: { ...prev.agent, [field]: value } }));
   };
   const handleVillaTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = e.target.value;
@@ -184,24 +248,56 @@ const App: React.FC = () => {
     setData(prev => ({ ...prev, guests: gs }));
   };
 
-  // ─── Smart Auto-Fill ────────────────────────────────────────────────────────
+  // ─── Saved Contacts ───────────────────────────────────────────────────────
+  const saveOwner = () => {
+    if (!data.lessor.name.trim()) return;
+    const contact: LessorData = { ...data.lessor, enabled: true };
+    const updated = savedOwners.some(o => o.name === contact.name)
+      ? savedOwners.map(o => o.name === contact.name ? contact : o)
+      : [...savedOwners, contact];
+    setSavedOwners(updated);
+    localStorage.setItem(LS_OWNERS, JSON.stringify(updated));
+  };
+  const loadOwner = (c: LessorData) => setData(prev => ({ ...prev, lessor: { ...c, enabled: true } }));
+  const deleteOwner = (name: string) => {
+    const updated = savedOwners.filter(o => o.name !== name);
+    setSavedOwners(updated);
+    localStorage.setItem(LS_OWNERS, JSON.stringify(updated));
+  };
+  const saveAgent = () => {
+    if (!data.agent.picName.trim()) return;
+    const contact: AgentData = { ...data.agent, enabled: true };
+    const updated = savedAgents.some(a => a.picName === contact.picName)
+      ? savedAgents.map(a => a.picName === contact.picName ? contact : a)
+      : [...savedAgents, contact];
+    setSavedAgents(updated);
+    localStorage.setItem(LS_AGENTS, JSON.stringify(updated));
+  };
+  const loadAgent = (c: AgentData) => setData(prev => ({ ...prev, agent: { ...c, enabled: true } }));
+  const deleteAgent = (name: string) => {
+    const updated = savedAgents.filter(a => a.picName !== name);
+    setSavedAgents(updated);
+    localStorage.setItem(LS_AGENTS, JSON.stringify(updated));
+  };
+
+  // ─── Smart Auto-Fill ──────────────────────────────────────────────────────
   const handleAutoFill = () => {
     if (!autoFillText.trim()) return;
     const parsed = parseRawText(autoFillText);
     let filled = 0;
     setData(prev => {
       const next = { ...prev };
-      if (parsed.villaName)   { next.villaName    = parsed.villaName;   filled++; }
-      if (parsed.checkInDate) { next.checkInDate  = parsed.checkInDate; filled++; isPriceManuallySet.current = false; }
-      if (parsed.checkOutDate){ next.checkOutDate = parsed.checkOutDate; filled++; isPriceManuallySet.current = false; }
-      if (parsed.monthlyPrice){ next.monthlyPrice = parsed.monthlyPrice; filled++; isPriceManuallySet.current = false; }
-      if (parsed.totalPrice)  { next.totalPrice   = parsed.totalPrice;  filled++; isPriceManuallySet.current = true; }
+      if (parsed.villaName)    { next.villaName    = parsed.villaName;   filled++; }
+      if (parsed.checkInDate)  { next.checkInDate  = parsed.checkInDate; filled++; isPriceManuallySet.current = false; }
+      if (parsed.checkOutDate) { next.checkOutDate = parsed.checkOutDate; filled++; isPriceManuallySet.current = false; }
+      if (parsed.monthlyPrice) { next.monthlyPrice = parsed.monthlyPrice; filled++; isPriceManuallySet.current = false; }
+      if (parsed.totalPrice)   { next.totalPrice   = parsed.totalPrice;  filled++; isPriceManuallySet.current = true; }
       if (parsed.name || parsed.passport || parsed.nationality || parsed.phone) {
         const guest = { ...next.guests[0] };
-        if (parsed.name)        { guest.name          = parsed.name;        filled++; }
-        if (parsed.passport)    { guest.passportNumber = parsed.passport;   filled++; }
+        if (parsed.name)        { guest.name          = parsed.name;       filled++; }
+        if (parsed.passport)    { guest.passportNumber = parsed.passport;  filled++; }
         if (parsed.nationality) { guest.nationality   = parsed.nationality; filled++; }
-        if (parsed.phone)       { guest.phone         = parsed.phone;       filled++; }
+        if (parsed.phone)       { guest.phone         = parsed.phone;      filled++; }
         next.guests = [guest, ...next.guests.slice(1)];
       }
       return next;
@@ -210,16 +306,18 @@ const App: React.FC = () => {
     setTimeout(() => setAutoFillMsg(''), 4000);
   };
 
-  // ─── Drive ──────────────────────────────────────────────────────────────────
+  // ─── Drive ────────────────────────────────────────────────────────────────
   const handleConnectDrive = async () => {
     setDriveStatus('Connecting…'); setGenerateError('');
     try { await signInToGoogle(); setDriveConnected(true); setDriveStatus('Connected ✓'); }
     catch (e: unknown) { setGenerateError(e instanceof Error ? e.message : 'Sign-in failed.'); setDriveStatus(''); }
   };
   const handleDisconnectDrive = () => {
-    signOutFromGoogle(); setDriveConnected(false); setDriveStatus(''); setSavedDriveLink('');
+    signOutFromGoogle(); setDriveConnected(false); setDriveStatus('');
+    setSavedDriveLink(''); setAutoTemplate(null); setTemplateBanner('');
   };
   const resolveTemplate = async (): Promise<File | ArrayBuffer | null> => {
+    if (autoTemplate) return autoTemplate;
     if (driveConnected) {
       setDriveStatus('Fetching template…');
       try { const buf = await fetchTemplateFromDrive(); setDriveStatus('Template ready ✓'); return buf; }
@@ -230,27 +328,25 @@ const App: React.FC = () => {
     return null;
   };
 
-  // ─── Generate ───────────────────────────────────────────────────────────────
+  // ─── Generate ─────────────────────────────────────────────────────────────
   const runValidation = () => {
     const errs = validateForm(data, computedData);
     if (errs.length > 0) { setFormErrors(errs); window.scrollTo({ top: 0, behavior: 'smooth' }); }
     return errs;
   };
-
   const handleDownload3rdParty = async () => {
     setFormErrors([]); setGenerateError(''); setSavedDriveLink('');
-    if (!driveConnected) { setGenerateError('Connect Google Drive to use the 3rd Party Contract template.'); return; }
+    if (!driveConnected && !autoTemplate) { setGenerateError('Connect Google Drive to use the 3rd Party Contract template.'); return; }
     if (runValidation().length > 0) return;
     setIsGenerating(true);
     try {
-      const buf = await fetchTemplateFromDrive();
+      const buf = autoTemplate ?? await fetchTemplateFromDrive();
       const { buffer, filename } = await generateDocument(buf, data, computedData);
       downloadContractLocally(buffer, filename);
       setDriveStatus('');
     } catch (e: unknown) { setGenerateError(e instanceof Error ? e.message : 'Error generating contract.'); }
     finally { setIsGenerating(false); }
   };
-
   const handleDownload = async () => {
     setFormErrors([]); setGenerateError(''); setSavedDriveLink('');
     if (runValidation().length > 0) return;
@@ -261,7 +357,6 @@ const App: React.FC = () => {
     catch (e: unknown) { setGenerateError(e instanceof Error ? e.message : 'Error generating contract.'); }
     finally { setIsGenerating(false); }
   };
-
   const handleSaveToDrive = async () => {
     setFormErrors([]); setGenerateError(''); setSavedDriveLink('');
     if (!driveConnected) { setGenerateError('Connect Google Drive first.'); return; }
@@ -276,7 +371,7 @@ const App: React.FC = () => {
     finally { setIsGenerating(false); }
   };
 
-  // ─── Inclusion items ────────────────────────────────────────────────────────
+  // ─── Inclusion items ──────────────────────────────────────────────────────
   const INCLUSIONS = [
     { key: 'cleaning2x' as const,  label: 'Cleaning 2x per week',         emoji: '🧹' },
     { key: 'pool2x' as const,      label: 'Pool Maintenance 2x per week', emoji: '🏊' },
@@ -287,7 +382,51 @@ const App: React.FC = () => {
     { key: 'electricity' as const, label: 'Electricity',                   emoji: '⚡' },
   ];
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
+  // ─── Reusable section header ──────────────────────────────────────────────
+  const SectionHeader = ({ num, icon, title, right }: {
+    num: number; icon: React.ReactNode; title: string; right?: React.ReactNode;
+  }) => (
+    <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 to-white flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3">
+        <span className="w-7 h-7 bg-emerald-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">{num}</span>
+        <h2 className="font-bold text-slate-800 flex items-center gap-2">{icon} {title}</h2>
+      </div>
+      {right}
+    </div>
+  );
+
+  // ─── Saved contact chips ───────────────────────────────────────────────────
+  const OwnerChips = () => savedOwners.length > 0 ? (
+    <div className="flex flex-wrap gap-2 mb-3">
+      {savedOwners.map(o => (
+        <div key={o.name} className="flex items-center gap-1 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
+          <button onClick={() => loadOwner(o)} className="text-xs font-semibold text-amber-800 hover:text-amber-600">
+            {o.name}
+          </button>
+          <button onClick={() => deleteOwner(o.name)} className="text-amber-400 hover:text-red-500 transition ml-1">
+            <X size={11} />
+          </button>
+        </div>
+      ))}
+    </div>
+  ) : null;
+
+  const AgentChips = () => savedAgents.length > 0 ? (
+    <div className="flex flex-wrap gap-2 mb-3">
+      {savedAgents.map(a => (
+        <div key={a.picName} className="flex items-center gap-1 bg-sky-50 border border-sky-200 rounded-full px-3 py-1">
+          <button onClick={() => loadAgent(a)} className="text-xs font-semibold text-sky-800 hover:text-sky-600">
+            {a.picName}
+          </button>
+          <button onClick={() => deleteAgent(a.picName)} className="text-sky-400 hover:text-red-500 transition ml-1">
+            <X size={11} />
+          </button>
+        </div>
+      ))}
+    </div>
+  ) : null;
+
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-emerald-50/40 text-slate-800 pb-16">
@@ -311,10 +450,28 @@ const App: React.FC = () => {
                   <span className="text-emerald-200 font-medium">Drive Connected</span>
                 </div>
               )}
-              <span className="text-xs text-emerald-400 font-mono bg-emerald-800/50 px-2 py-1 rounded-lg">v3.0.0</span>
+              <span className="text-xs text-emerald-400 font-mono bg-emerald-800/50 px-2 py-1 rounded-lg">v3.1.0</span>
             </div>
           </div>
         </header>
+
+        {/* ── Template Auto-Load Banner ── */}
+        {templateBanner === 'loaded' && (
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-4">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 flex items-center gap-2 text-sm text-emerald-700">
+              <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+              <span><strong>Template auto-loaded</strong> — always uses latest version from Google Drive</span>
+            </div>
+          </div>
+        )}
+        {templateBanner === 'loading' && (
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 flex items-center gap-2 text-sm text-slate-500 animate-pulse">
+              <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
+              Loading template from Google Drive…
+            </div>
+          </div>
+        )}
 
         {/* ── Validation Banner ── */}
         {formErrors.length > 0 && (
@@ -353,23 +510,20 @@ const App: React.FC = () => {
               </div>
               <span className="text-slate-400 text-lg mt-1">{autoFillOpen ? '∧' : '∨'}</span>
             </button>
-
             {autoFillOpen && (
               <div className="px-5 pb-5 space-y-3 border-t border-emerald-100">
                 <div className="pt-3">
                   <textarea
                     value={autoFillText}
                     onChange={e => setAutoFillText(e.target.value)}
-                    rows={6}
+                    rows={5}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 font-mono placeholder-slate-400 focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 outline-none transition resize-y"
-                    placeholder={`Paste anything here, e.g.:\n\nGuest: John Smith\nNationality: British\nPassport: AB123456\nPhone: +44 7911 123456\nCheck-in: 1 April 2025\nCheck-out: 30 April 2025\nVilla: Villa Serenity\nMonthly: 30000000`}
+                    placeholder={`Paste anything here:\nGuest: John Smith · Nationality: British · Passport: AB123456\nCheck-in: 1 April 2025 · Check-out: 30 April 2025\nVilla: Villa Serenity · Monthly: 30,000,000`}
                   />
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
-                  <button
-                    onClick={handleAutoFill}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition active:scale-95"
-                  >
+                  <button onClick={handleAutoFill}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition active:scale-95">
                     <span>⚡</span> Parse &amp; Auto-Fill Form
                   </button>
                   {autoFillMsg && (
@@ -378,16 +532,11 @@ const App: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-slate-500">
-                    <span className="text-yellow-500">💡</span>{' '}
-                    <strong className="text-slate-600">Supported labels:</strong>{' '}
-                    Name · Passport · Nationality · Phone · Check in/out · Villa · Price · Monthly · Deposit · Owner · Agent · PIC · Email
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    <span className="text-yellow-500">💡</span> Works with casual messages too — just paste and try!
-                  </p>
-                </div>
+                <p className="text-xs text-slate-500">
+                  <span className="text-yellow-500">💡</span>{' '}
+                  <strong className="text-slate-600">Supported labels:</strong>{' '}
+                  Name · Passport · Nationality · Phone · Check in/out · Villa · Monthly · Total
+                </p>
               </div>
             )}
           </div>
@@ -400,39 +549,32 @@ const App: React.FC = () => {
 
               {/* ── SECTION 1: Villa Details ── */}
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3 bg-gradient-to-r from-emerald-50/80 to-white">
-                  <div className="flex items-center gap-3">
-                    <span className="w-7 h-7 bg-emerald-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">1</span>
-                    <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                      <Home className="w-4 h-4 text-emerald-600" /> Villa Details
-                    </h2>
-                  </div>
-                  <div className="relative">
-                    <select
-                      onChange={handleVillaTemplateChange}
-                      defaultValue=""
-                      className="appearance-none pl-3 pr-8 py-2 text-sm border border-emerald-200 bg-emerald-50 text-emerald-800 font-semibold rounded-xl focus:ring-2 focus:ring-emerald-400 outline-none cursor-pointer transition"
-                    >
-                      <option value="" disabled>Load Villa Template…</option>
-                      <option value="custom">✏ Custom / New Villa</option>
-                      <optgroup label="Saved Villas">
-                        {VILLA_TEMPLATES.map(v => <option key={v.name} value={v.name}>{v.name}</option>)}
-                      </optgroup>
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-emerald-600 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-                </div>
+                <SectionHeader num={1} icon={<Home className="w-4 h-4 text-emerald-600" />} title="Villa Details"
+                  right={
+                    <div className="relative">
+                      <select onChange={handleVillaTemplateChange} defaultValue=""
+                        className="appearance-none pl-3 pr-8 py-2 text-sm border border-emerald-200 bg-emerald-50 text-emerald-800 font-semibold rounded-xl focus:ring-2 focus:ring-emerald-400 outline-none cursor-pointer transition">
+                        <option value="" disabled>Load Villa Template…</option>
+                        <option value="custom">✏ Custom / New Villa</option>
+                        <optgroup label="Saved Villas">
+                          {VILLA_TEMPLATES.map(v => <option key={v.name} value={v.name}>{v.name}</option>)}
+                        </optgroup>
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-emerald-600 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  }
+                />
                 <div className="px-6 py-5 space-y-4">
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Villa Name <span className="text-red-400">*</span></label>
                     <input type="text" value={data.villaName} onChange={e => handleInputChange('villaName', e.target.value)}
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 outline-none transition"
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"
                       placeholder="e.g. Villa Sentosa" />
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Villa Address <span className="text-red-400">*</span></label>
                     <input type="text" value={data.villaAddress} onChange={e => handleInputChange('villaAddress', e.target.value)}
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 outline-none transition"
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"
                       placeholder="e.g. Jalan Raya Canggu No. 12, Bali" />
                   </div>
                   <div className="w-36">
@@ -446,21 +588,15 @@ const App: React.FC = () => {
 
               {/* ── SECTION 2: Guests ── */}
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-50/80 to-white">
-                  <div className="flex items-center gap-3">
-                    <span className="w-7 h-7 bg-emerald-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">2</span>
-                    <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                      <Users className="w-4 h-4 text-emerald-600" /> Guests
-                      <span className="text-xs font-normal text-slate-400">({data.guests.length}/{MAX_GUESTS})</span>
-                    </h2>
-                  </div>
-                  {data.guests.length < MAX_GUESTS && (
+                <SectionHeader num={2} icon={<Users className="w-4 h-4 text-emerald-600" />}
+                  title={`Guests (${data.guests.length}/${MAX_GUESTS})`}
+                  right={data.guests.length < MAX_GUESTS ? (
                     <button onClick={addGuest}
                       className="flex items-center gap-1.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition px-3 py-1.5 rounded-xl active:scale-95">
                       <Plus className="w-3.5 h-3.5" /> Add Guest
                     </button>
-                  )}
-                </div>
+                  ) : undefined}
+                />
                 <div className="px-6 py-5 space-y-5">
                   {data.guests.map((guest, index) => (
                     <div key={guest.id} className="border border-emerald-100 rounded-2xl overflow-hidden">
@@ -477,11 +613,12 @@ const App: React.FC = () => {
                         <PassportUploader onScanComplete={(name, passport) => handlePassportScan(index, name, passport)} />
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {[
-                            { field: 'name' as const,          label: 'Full Name',      req: true,  type: 'text',  ph: 'As on passport' },
-                            { field: 'passportNumber' as const, label: 'Passport No.',   req: true,  type: 'text',  ph: 'e.g. A1234567' },
-                            { field: 'nationality' as const,    label: 'Nationality',    req: true,  type: 'text',  ph: 'e.g. Australian' },
-                            { field: 'phone' as const,          label: 'Phone',          req: false, type: 'text',  ph: '+62 …' },
-                            { field: 'birthday' as const,       label: 'Date of Birth',  req: false, type: 'date',  ph: '' },
+                            { field: 'name' as const,          label: 'Full Name',        req: true,  type: 'text', ph: 'As on passport' },
+                            { field: 'passportNumber' as const, label: 'Passport No.',     req: true,  type: 'text', ph: 'e.g. A1234567' },
+                            { field: 'nationality' as const,    label: 'Nationality',      req: true,  type: 'text', ph: 'e.g. Australian' },
+                            { field: 'phone' as const,          label: 'Phone / WhatsApp', req: false, type: 'text', ph: '+62 …' },
+                            { field: 'birthplace' as const,     label: 'Place of Birth',   req: false, type: 'text', ph: 'e.g. London' },
+                            { field: 'birthday' as const,       label: 'Date of Birth',    req: false, type: 'date', ph: '' },
                           ].map(({ field, label, req, type, ph }) => (
                             <div key={field}>
                               <label className="block text-xs font-semibold text-slate-600 mb-1">
@@ -502,12 +639,7 @@ const App: React.FC = () => {
 
               {/* ── SECTION 3: Stay Details ── */}
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 to-white flex items-center gap-3">
-                  <span className="w-7 h-7 bg-emerald-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">3</span>
-                  <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-emerald-600" /> Stay Details
-                  </h2>
-                </div>
+                <SectionHeader num={3} icon={<Calendar className="w-4 h-4 text-emerald-600" />} title="Stay Details" />
                 <div className="px-6 py-5 space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
@@ -542,18 +674,11 @@ const App: React.FC = () => {
 
               {/* ── SECTION 4: Financials ── */}
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 to-white flex items-center gap-3">
-                  <span className="w-7 h-7 bg-emerald-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">4</span>
-                  <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-emerald-600" /> Financials (IDR)
-                  </h2>
-                </div>
+                <SectionHeader num={4} icon={<CreditCard className="w-4 h-4 text-emerald-600" />} title="Financials (IDR)" />
                 <div className="px-6 py-5 space-y-4">
                   {/* Monthly Price */}
                   <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                    <label className="block text-sm font-bold text-blue-800 mb-2">
-                      Monthly Price (Rp) <span className="text-red-400">*</span>
-                    </label>
+                    <label className="block text-sm font-bold text-blue-800 mb-2">Monthly Price (Rp) <span className="text-red-400">*</span></label>
                     <div className="flex items-center border border-blue-200 rounded-xl overflow-hidden bg-white">
                       <span className="px-3 py-2.5 text-slate-500 font-bold text-sm bg-slate-50 border-r border-blue-200 flex-shrink-0">Rp</span>
                       <input type="number" value={data.monthlyPrice || ''}
@@ -561,29 +686,23 @@ const App: React.FC = () => {
                         className="flex-1 px-3 py-2.5 text-sm font-mono outline-none focus:bg-blue-50/30 transition"
                         placeholder="e.g. 30000000" />
                     </div>
-                    <p className="text-xs text-blue-600 mt-1.5">Entering this auto-calculates the Total Price based on nights (pro-rated).</p>
-                    {data.monthlyPrice > 0 && (
-                      <p className="text-xs text-blue-500 font-bold mt-1">= {formatIDR(data.monthlyPrice)} / month</p>
-                    )}
+                    {data.monthlyPrice > 0 && <p className="text-xs text-blue-500 font-bold mt-1.5">= {formatIDR(data.monthlyPrice)} / month</p>}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Total Price */}
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                        Total Agreed Price (Rp) <span className="text-red-400">*</span>
-                      </label>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Total Agreed Price (Rp) <span className="text-red-400">*</span></label>
                       <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
                         <span className="px-3 py-2.5 text-slate-500 font-bold text-sm bg-slate-50 border-r border-slate-200 flex-shrink-0">Rp</span>
                         <input type="number" value={data.totalPrice || ''}
                           onChange={e => handleTotalPriceChange(parseFloat(e.target.value) || 0)}
-                          className="flex-1 px-3 py-2.5 text-sm font-mono outline-none focus:bg-emerald-50/30 transition"
+                          className="flex-1 px-3 py-2.5 text-sm font-mono outline-none transition"
                           placeholder="Auto-calculated" />
                       </div>
                       {data.totalPrice > 0 && <p className="text-xs text-slate-500 mt-1 font-semibold">{formatIDR(data.totalPrice)}</p>}
                       {isPriceManuallySet.current && <p className="text-xs text-amber-600 mt-1">⚠ Manual override active</p>}
                     </div>
-
                     {/* Security Deposit */}
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">Security Deposit (10% of Total)</label>
@@ -601,17 +720,108 @@ const App: React.FC = () => {
                       onChange={e => handleInputChange('paymentDueDate', e.target.value)}
                       className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition" />
                   </div>
+
+                  {/* Commission — collapsible amber panel */}
+                  <div className="border border-amber-200 rounded-xl overflow-hidden">
+                    <button onClick={() => setCommissionOpen(o => !o)}
+                      className="w-full px-4 py-3 flex items-center justify-between bg-amber-50 hover:bg-amber-100/60 transition text-left">
+                      <div className="flex items-center gap-2">
+                        <span className="text-amber-500 text-base">💰</span>
+                        <span className="font-bold text-amber-800 text-sm">Commission / Agent Fee</span>
+                        <span className="text-xs bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full border border-amber-200">Owner copy only</span>
+                      </div>
+                      <span className="text-amber-500 text-sm">{commissionOpen ? '∧' : '∨'}</span>
+                    </button>
+                    {commissionOpen && (
+                      <div className="px-4 pb-4 pt-3 bg-white space-y-3">
+                        {/* Commission Type */}
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1.5">Commission Basis</label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {([
+                              { value: 'percent_total',   label: '% of Total' },
+                              { value: 'percent_monthly', label: '% of Monthly' },
+                              { value: 'fixed',           label: 'Fixed Amount' },
+                            ] as { value: CommissionType; label: string }[]).map(opt => (
+                              <button key={opt.value}
+                                onClick={() => handleInputChange('commissionType', opt.value)}
+                                className={`py-2 text-xs font-semibold rounded-xl border-2 transition ${
+                                  data.commissionType === opt.value
+                                    ? 'bg-amber-500 border-amber-500 text-white'
+                                    : 'bg-white border-slate-200 text-slate-600 hover:border-amber-300'
+                                }`}>
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* Rate */}
+                          {data.commissionType !== 'fixed' && (
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-600 mb-1">Rate (%)</label>
+                              <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
+                                <input type="number" min={0} max={100} step={0.5}
+                                  value={data.commissionPercent || ''}
+                                  onChange={e => handleInputChange('commissionPercent', parseFloat(e.target.value) || 0)}
+                                  className="flex-1 px-3 py-2 text-sm font-mono outline-none"
+                                  placeholder="e.g. 15" />
+                                <span className="px-3 py-2 text-slate-500 font-bold text-sm bg-slate-50 border-l border-slate-200">%</span>
+                              </div>
+                            </div>
+                          )}
+                          {/* Amount */}
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">
+                              Amount (Rp) {data.commissionType !== 'fixed' && <span className="text-slate-400 font-normal">— auto</span>}
+                            </label>
+                            <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
+                              <span className="px-2 py-2 text-slate-500 font-bold text-xs bg-slate-50 border-r border-slate-200">Rp</span>
+                              <input type="number" min={0}
+                                value={data.commissionAmount || ''}
+                                readOnly={data.commissionType !== 'fixed'}
+                                onChange={e => data.commissionType === 'fixed'
+                                  ? handleInputChange('commissionAmount', parseFloat(e.target.value) || 0)
+                                  : undefined
+                                }
+                                className={`flex-1 px-3 py-2 text-sm font-mono outline-none ${data.commissionType !== 'fixed' ? 'bg-slate-50 text-slate-500' : ''}`}
+                                placeholder="0" />
+                            </div>
+                            {data.commissionAmount > 0 && (
+                              <p className="text-xs text-amber-600 mt-1 font-semibold">{formatIDR(data.commissionAmount)}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Net to Owner */}
+                        {data.commissionAmount > 0 && data.totalPrice > 0 && (
+                          <div className="bg-amber-50 rounded-xl px-4 py-2.5 flex items-center justify-between border border-amber-200">
+                            <span className="text-xs font-bold text-amber-700">Net to Owner:</span>
+                            <span className="text-sm font-bold text-amber-900 font-mono">
+                              {formatIDR(data.totalPrice - data.commissionAmount)}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Commission Notes */}
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">Payment Notes (optional)</label>
+                          <input type="text"
+                            value={data.commissionNotes}
+                            onChange={e => handleInputChange('commissionNotes', e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-amber-400 outline-none transition"
+                            placeholder="e.g. Paid within 7 days of check-in" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </section>
 
               {/* ── SECTION 5: Inclusions ── */}
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 to-white flex items-center gap-3">
-                  <span className="w-7 h-7 bg-emerald-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">5</span>
-                  <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                    <ListTodo className="w-4 h-4 text-emerald-600" /> Inclusions
-                  </h2>
-                </div>
+                <SectionHeader num={5} icon={<ListTodo className="w-4 h-4 text-emerald-600" />} title="Inclusions" />
                 <div className="px-6 py-5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     {INCLUSIONS.map(({ key, label, emoji }) => {
@@ -643,6 +853,139 @@ const App: React.FC = () => {
                 </div>
               </section>
 
+              {/* ── SECTION 6: Lessor / Property Owner ── */}
+              <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-amber-50/80 to-white flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-7 h-7 bg-amber-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">6</span>
+                    <div>
+                      <h2 className="font-bold text-slate-800 flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-amber-600" /> Lessor / Property Owner
+                      </h2>
+                      <p className="text-xs text-amber-600 mt-0.5">
+                        {data.lessor.enabled ? 'Owner data enabled — will appear in contract' : 'Owner data available for this deal? Enable to enter details.'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <Toggle checked={data.lessor.enabled} onChange={() => handleLessorChange('enabled', !data.lessor.enabled)} />
+                    <ChevronDown className={`w-4 h-4 text-amber-400 transition-transform ${data.lessor.enabled ? 'rotate-180' : ''}`} />
+                  </div>
+                </div>
+
+                {data.lessor.enabled && (
+                  <div className="px-6 py-5 space-y-4">
+                    {/* Saved contacts */}
+                    {savedOwners.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                          <FolderOpen className="w-3.5 h-3.5" /> Load from Saved
+                        </p>
+                        <OwnerChips />
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {[
+                        { field: 'name' as const,        label: 'Full Name',        req: true,  ph: 'Owner full name' },
+                        { field: 'idNumber' as const,     label: 'KTP / Passport No.', req: false, ph: 'ID number' },
+                        { field: 'nationality' as const,  label: 'Nationality',      req: false, ph: 'e.g. Indonesian' },
+                        { field: 'phone' as const,        label: 'Phone',            req: false, ph: '+62 …' },
+                        { field: 'email' as const,        label: 'Email',            req: false, ph: 'owner@email.com' },
+                      ].map(({ field, label, req, ph }) => (
+                        <div key={field}>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">
+                            {label} {req && <span className="text-red-400">*</span>}
+                          </label>
+                          <input type="text" value={data.lessor[field] as string}
+                            onChange={e => handleLessorChange(field, e.target.value)}
+                            placeholder={ph}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-amber-400 outline-none transition" />
+                        </div>
+                      ))}
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Address</label>
+                        <input type="text" value={data.lessor.address}
+                          onChange={e => handleLessorChange('address', e.target.value)}
+                          placeholder="Owner's address"
+                          className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-amber-400 outline-none transition" />
+                      </div>
+                    </div>
+
+                    {/* Save button */}
+                    {data.lessor.name.trim() && (
+                      <button onClick={saveOwner}
+                        className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition active:scale-95">
+                        <Save className="w-3.5 h-3.5" /> Save to Contacts
+                      </button>
+                    )}
+                  </div>
+                )}
+              </section>
+
+              {/* ── SECTION 7: Agent / PIC ── */}
+              <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-sky-50/80 to-white flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-7 h-7 bg-sky-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">7</span>
+                    <div>
+                      <h2 className="font-bold text-slate-800 flex items-center gap-2">
+                        <UserCog className="w-4 h-4 text-sky-600" /> Agent / Person in Charge
+                      </h2>
+                      <p className="text-xs text-sky-600 mt-0.5">
+                        {data.agent.enabled ? 'Agent data enabled — will appear in contract' : 'Is there an agent or PIC for this deal? Enable to enter details.'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <Toggle checked={data.agent.enabled} onChange={() => handleAgentChange('enabled', !data.agent.enabled)} />
+                    <ChevronDown className={`w-4 h-4 text-sky-400 transition-transform ${data.agent.enabled ? 'rotate-180' : ''}`} />
+                  </div>
+                </div>
+
+                {data.agent.enabled && (
+                  <div className="px-6 py-5 space-y-4">
+                    {/* Saved contacts */}
+                    {savedAgents.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                          <FolderOpen className="w-3.5 h-3.5" /> Load from Saved
+                        </p>
+                        <AgentChips />
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {[
+                        { field: 'picName' as const,  label: 'PIC Full Name',  req: true,  ph: 'Person in Charge' },
+                        { field: 'company' as const,  label: 'Company',        req: false, ph: 'PT The Villa Managers' },
+                        { field: 'position' as const, label: 'Position',       req: false, ph: 'Property Manager' },
+                        { field: 'phone' as const,    label: 'Phone',          req: false, ph: '+62 …' },
+                        { field: 'email' as const,    label: 'Email',          req: false, ph: 'agent@email.com' },
+                      ].map(({ field, label, req, ph }) => (
+                        <div key={field}>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">
+                            {label} {req && <span className="text-red-400">*</span>}
+                          </label>
+                          <input type="text" value={data.agent[field] as string}
+                            onChange={e => handleAgentChange(field, e.target.value)}
+                            placeholder={ph}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-sky-400 outline-none transition" />
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Save button */}
+                    {data.agent.picName.trim() && (
+                      <button onClick={saveAgent}
+                        className="flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white text-xs font-bold rounded-xl transition active:scale-95">
+                        <Save className="w-3.5 h-3.5" /> Save to Contacts
+                      </button>
+                    )}
+                  </div>
+                )}
+              </section>
+
             </div>{/* end left column */}
 
             {/* ── RIGHT: Sticky Generate Card ── */}
@@ -662,7 +1005,6 @@ const App: React.FC = () => {
                     {/* Template Source */}
                     <div className="bg-emerald-800/30 rounded-xl p-4 space-y-3">
                       <p className="text-xs font-bold uppercase tracking-widest text-emerald-300">Template Source</p>
-
                       {driveConnected ? (
                         <div className="bg-emerald-600/30 border border-emerald-500/50 rounded-xl p-3 space-y-1.5">
                           <div className="flex items-center gap-2">
@@ -671,7 +1013,9 @@ const App: React.FC = () => {
                             </div>
                             <span className="text-sm font-bold">Lease Agreement Template</span>
                           </div>
-                          <p className="text-xs text-emerald-300 pl-7">via Google Drive · 3rd Party</p>
+                          <p className="text-xs text-emerald-300 pl-7">
+                            {autoTemplate ? '✓ Auto-loaded from Drive' : 'via Google Drive · 3rd Party'}
+                          </p>
                           <button onClick={handleDisconnectDrive}
                             className="pl-7 flex items-center gap-1 text-xs text-emerald-400 hover:text-red-300 transition">
                             <LogOut className="w-3 h-3" /> Disconnect
@@ -683,8 +1027,8 @@ const App: React.FC = () => {
                             className="w-full py-2.5 bg-white text-emerald-800 hover:bg-emerald-50 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition shadow-sm active:scale-95">
                             <CloudUpload className="w-4 h-4" /> Connect Google Drive
                           </button>
-                          <p className="text-xs text-emerald-300 text-center leading-relaxed">
-                            Uses the standard lease template automatically
+                          <p className="text-xs text-emerald-300 text-center">
+                            Template auto-loads from Drive on connect
                           </p>
                           <div className="border-t border-emerald-600/50 pt-3">
                             <p className="text-xs text-emerald-400 mb-2 font-semibold">Or upload manually:</p>
@@ -702,7 +1046,6 @@ const App: React.FC = () => {
                           </div>
                         </div>
                       )}
-
                       {driveStatus && (
                         <p className="text-xs text-emerald-200 animate-pulse flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping inline-block" />
@@ -711,25 +1054,43 @@ const App: React.FC = () => {
                       )}
                     </div>
 
+                    {/* Copy Type Selector */}
+                    <div className="bg-emerald-800/30 rounded-xl p-4 space-y-2.5">
+                      <p className="text-xs font-bold uppercase tracking-widest text-emerald-300">Contract Copy For</p>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {(['CLIENT', 'OWNER', 'AGENT'] as CopyType[]).map(ct => (
+                          <button key={ct}
+                            onClick={() => handleInputChange('copyType', ct)}
+                            className={`py-2.5 text-xs font-bold rounded-xl transition active:scale-95 ${
+                              data.copyType === ct
+                                ? 'bg-white text-emerald-800 shadow-sm'
+                                : 'bg-emerald-700/50 text-emerald-300 hover:bg-emerald-600/60'
+                            }`}>
+                            {ct}
+                          </button>
+                        ))}
+                      </div>
+                      {data.copyType === 'OWNER' && (
+                        <p className="text-xs text-yellow-300 flex items-center gap-1">
+                          <span>💰</span> Commission &amp; net amount included
+                        </p>
+                      )}
+                    </div>
+
                     {/* Action Buttons */}
                     <div className="space-y-2">
-                      {/* 3rd Party Contract — Drive only */}
                       <button onClick={handleDownload3rdParty}
-                        disabled={isGenerating || !driveConnected}
+                        disabled={isGenerating || (!driveConnected && !autoTemplate)}
                         className="w-full py-3 bg-white hover:bg-emerald-50 disabled:bg-white/30 disabled:cursor-not-allowed text-emerald-800 disabled:text-emerald-600/40 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition shadow-sm active:scale-95">
                         <Zap className="w-4 h-4 text-yellow-500" />
                         {isGenerating ? 'Generating…' : '3rd Party Contract'}
                       </button>
-
-                      {/* Download Contract */}
                       <button onClick={handleDownload}
-                        disabled={isGenerating || (!driveConnected && !localTemplateFile)}
+                        disabled={isGenerating || (!driveConnected && !autoTemplate && !localTemplateFile)}
                         className="w-full py-3 bg-emerald-900 hover:bg-emerald-950 disabled:bg-emerald-900/50 disabled:cursor-not-allowed text-white disabled:text-white/40 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition shadow-md active:scale-95">
                         <FileDown className="w-4 h-4" />
                         {isGenerating ? 'Generating…' : 'Download Contract'}
                       </button>
-
-                      {/* Save to Drive */}
                       {driveConnected && (
                         <button onClick={handleSaveToDrive} disabled={isGenerating}
                           className="w-full py-3 bg-blue-500 hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition active:scale-95">
@@ -739,15 +1100,12 @@ const App: React.FC = () => {
                       )}
                     </div>
 
-                    {/* Drive link */}
                     {savedDriveLink && (
                       <a href={savedDriveLink} target="_blank" rel="noopener noreferrer"
                         className="flex items-center gap-2 text-xs text-emerald-200 hover:text-white underline underline-offset-2 transition">
-                        <Link2 className="w-3 h-3" /> Open saved contract in Google Drive →
+                        <Link2 className="w-3 h-3" /> Open saved contract in Drive →
                       </a>
                     )}
-
-                    {/* Error */}
                     {generateError && (
                       <div className="text-xs text-red-200 bg-red-900/40 border border-red-700/50 rounded-xl p-3 flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -755,8 +1113,21 @@ const App: React.FC = () => {
                       </div>
                     )}
 
+                    {/* Bank Details Reference */}
+                    <div className="bg-emerald-800/20 border border-emerald-600/40 rounded-xl p-3.5 space-y-1.5">
+                      <p className="text-xs font-bold uppercase tracking-widest text-emerald-300 mb-2">Payment To</p>
+                      <p className="text-xs font-bold text-white">PT THE VILLA MANAGERS</p>
+                      <p className="text-xs text-emerald-300">BANK CIMB NIAGA · Denpasar</p>
+                      <div className="border-t border-emerald-700/50 pt-2 space-y-1">
+                        <p className="text-xs text-emerald-200"><span className="text-emerald-400 font-semibold">IDR:</span> 800206006300</p>
+                        <p className="text-xs text-emerald-200"><span className="text-emerald-400 font-semibold">AUD:</span> 800206009950</p>
+                        <p className="text-xs text-emerald-200"><span className="text-emerald-400 font-semibold">EUR:</span> 800206008730</p>
+                        <p className="text-xs text-emerald-200"><span className="text-emerald-400 font-semibold">SWIFT:</span> BNIAIDJA</p>
+                      </div>
+                    </div>
+
                     <p className="text-xs text-emerald-400 text-center pt-1">
-                      Template: Lease Agreement 3rd party · IDR currency
+                      Template: Lease Agreement 3rd party · IDR
                     </p>
                   </div>
                 </div>
@@ -771,7 +1142,7 @@ const App: React.FC = () => {
         </main>
 
         <footer className="text-center py-6 text-xs text-slate-400">
-          Villa Contract Generator v3.0.0 · Built for Bali Villa Rentals 🌴
+          Villa Contract Generator v3.1.0 · Built for Bali Villa Rentals 🌴
         </footer>
 
       </div>

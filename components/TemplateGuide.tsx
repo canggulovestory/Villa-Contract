@@ -24,13 +24,16 @@ const VARIABLES: TemplateVar[] = [
   { tag: '{{guest1Passport}}',    desc: 'Guest 1 — Passport Number' },
   { tag: '{{guest1Nationality}}', desc: 'Guest 1 — Nationality' },
   { tag: '{{guest1Phone}}',       desc: 'Guest 1 — Phone' },
+  { tag: '{{guest1Birthplace}}',  desc: 'Guest 1 — Place of Birth' },
   { tag: '{{guest1Birthday}}',    desc: 'Guest 1 — Date of Birth' },
+  { tag: '{{guest1PlaceAndDOB}}', desc: 'Guest 1 — Place & Date of Birth (combined)' },
 
   // Guest 2
-  { tag: '{{guest2Name}}',        desc: 'Guest 2 — Full Name (if applicable)' },
+  { tag: '{{guest2Name}}',        desc: 'Guest 2 — Full Name' },
   { tag: '{{guest2Passport}}',    desc: 'Guest 2 — Passport Number' },
   { tag: '{{guest2Nationality}}', desc: 'Guest 2 — Nationality' },
-  { tag: '{{guest2Phone}}',       desc: 'Guest 2 — Phone' },
+  { tag: '{{guest2Birthplace}}',  desc: 'Guest 2 — Place of Birth' },
+  { tag: '{{guest2PlaceAndDOB}}', desc: 'Guest 2 — Place & Date of Birth (combined)' },
 
   // Dates
   { tag: '{{checkInDate}}',    desc: 'Check-in Date' },
@@ -42,18 +45,56 @@ const VARIABLES: TemplateVar[] = [
   { tag: '{{numberOfMonths}}', desc: 'Total months' },
 
   // Money
-  { tag: '{{monthlyPrice}}',   desc: 'Monthly Price (IDR formatted)' },
-  { tag: '{{totalPrice}}',     desc: 'Total Price (IDR formatted)' },
-  { tag: '{{securityDeposit}}',desc: '10% Security Deposit (IDR formatted)' },
-  { tag: '{{totalPriceRaw}}',  desc: 'Total Price (raw number for math)' },
+  { tag: '{{monthlyPrice}}',    desc: 'Monthly Price (IDR formatted)' },
+  { tag: '{{totalPrice}}',      desc: 'Total Price (IDR formatted)' },
+  { tag: '{{securityDeposit}}', desc: '10% Security Deposit (IDR formatted)' },
+  { tag: '{{totalPriceRaw}}',   desc: 'Total Price (raw number)' },
+
+  // Commission (OWNER copy only)
+  { tag: '{{commissionAmount}}',    desc: 'Commission Amount (IDR) — owner copy only' },
+  { tag: '{{commissionPercent}}',   desc: 'Commission Rate (%)' },
+  { tag: '{{commissionTypeLabel}}', desc: 'Commission basis label' },
+  { tag: '{{commissionNotes}}',     desc: 'Commission payment notes' },
+  { tag: '{{netOwnerAmount}}',      desc: 'Net to Owner after commission' },
 
   // Inclusions
-  { tag: '{{inclusionsList}}', desc: 'Comma-separated list of inclusions' },
+  { tag: '{{inclusionsList}}',   desc: 'Comma-separated list of all inclusions' },
+  { tag: '{{banjarFeeYesNo}}',   desc: 'Banjar Fee: Yes or No' },
+  { tag: '{{rubbishFeeYesNo}}',  desc: 'Rubbish Fee: Yes or No' },
+  { tag: '{{electricityYesNo}}', desc: 'Electricity: Yes or No' },
+  { tag: '{{internetYesNo}}',    desc: 'Internet/WiFi: Yes or No' },
 
-  // ─── Legacy tags (kept for backward compatibility) ───────────────────
-  // These work but {{guest1Name}} / {{guest1Passport}} are preferred.
-  { tag: '{{lesseeName}}',     desc: 'Guest 1 Name (legacy alias)', legacy: true },
-  { tag: '{{passportNumber}}', desc: 'Guest 1 Passport (legacy alias)', legacy: true },
+  // Lessor / Owner (requires Owner section enabled)
+  { tag: '{{lessorName}}',        desc: 'Property Owner — Full Name' },
+  { tag: '{{lessorIdNumber}}',    desc: 'Property Owner — KTP / Passport No.' },
+  { tag: '{{lessorNationality}}', desc: 'Property Owner — Nationality' },
+  { tag: '{{lessorAddress}}',     desc: 'Property Owner — Address' },
+  { tag: '{{lessorPhone}}',       desc: 'Property Owner — Phone' },
+  { tag: '{{lessorEmail}}',       desc: 'Property Owner — Email' },
+
+  // Agent / PIC (requires Agent section enabled)
+  { tag: '{{agentPicName}}',  desc: 'Agent — Person in Charge Name' },
+  { tag: '{{agentCompany}}',  desc: 'Agent — Company Name' },
+  { tag: '{{agentPosition}}', desc: 'Agent — Position / Title' },
+  { tag: '{{agentPhone}}',    desc: 'Agent — Phone' },
+  { tag: '{{agentEmail}}',    desc: 'Agent — Email' },
+
+  // Bank Details (always injected)
+  { tag: '{{bankName}}',        desc: 'Bank — BANK CIMB NIAGA' },
+  { tag: '{{bankAccountName}}', desc: 'Bank — PT THE VILLA MANAGERS' },
+  { tag: '{{bankIDR}}',         desc: 'Bank — IDR Account No.' },
+  { tag: '{{bankAUD}}',         desc: 'Bank — AUD Account No.' },
+  { tag: '{{bankEUR}}',         desc: 'Bank — EUR Account No.' },
+  { tag: '{{bankSWIFT}}',       desc: 'Bank — SWIFT Code (BNIAIDJA)' },
+
+  // Copy type
+  { tag: '{{copyType}}', desc: 'CLIENT / OWNER / AGENT' },
+
+  // ─── Legacy tags ────────────────────────────────────────────────────
+  { tag: '{{lesseeName}}',       desc: 'Guest 1 Name (legacy alias)', legacy: true },
+  { tag: '{{passportNumber}}',   desc: 'Guest 1 Passport (legacy alias)', legacy: true },
+  { tag: '{{lesseeBirthplace}}', desc: 'Guest 1 Place of Birth (legacy alias)', legacy: true },
+  { tag: '{{lesseePlaceAndDOB}}',desc: 'Guest 1 Place & DOB (legacy alias)', legacy: true },
 ];
 
 // ─── CopyButton ───────────────────────────────────────────────────────────

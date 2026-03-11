@@ -2,23 +2,22 @@ import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
 import { ContractData, ComputedData } from '../types';
-// Fixed: import shared formatters instead of duplicating inline
 import { formatIDR, formatDate } from '../utils/format';
 
-// ─── generateDocument ─────────────────────────────────────────────────────
-// Reads a .docx template (from a local File OR an ArrayBuffer from Google
-// Drive), injects all contract data, and returns the filled content as an
-// ArrayBuffer so the caller can decide: download locally or save to Drive.
-//
-// Fixed:
-//  1. Accepts File | ArrayBuffer — works with both local upload and Drive fetch.
-//  2. Returns { buffer, filename } — caller chooses download or Drive upload.
-//  3. Uses file.arrayBuffer() instead of the legacy FileReader callback API.
-//  4. Uses shared formatIDR / formatDate from utils (no duplication).
-//  5. Better filename fallback (no trailing underscore when name is empty).
-//  6. Surfaces the actual Docxtemplater error message to the caller.
-//  7. Consistent Indonesian date format regardless of browser locale.
+// ─── Hardcoded PT The Villa Managers Bank Details ─────────────────────────
+const BANK = {
+  name:        'BANK CIMB NIAGA',
+  branch:      'Denpasar',
+  accountName: 'PT THE VILLA MANAGERS',
+  idr:         '800206006300',
+  aud:         '800206009950',
+  eur:         '800206008730',
+  swift:       'BNIAIDJA',
+  bankCode:    '022',
+  branchCode:  '0424',
+} as const;
 
+// ─── generateDocument ─────────────────────────────────────────────────────
 export interface GenerateResult {
   buffer: ArrayBuffer;
   filename: string;
@@ -29,7 +28,6 @@ export const generateDocument = async (
   data: ContractData,
   computed: ComputedData
 ): Promise<GenerateResult> => {
-  // Supports both a user-uploaded File and an ArrayBuffer fetched from Drive
   const buffer =
     templateSource instanceof ArrayBuffer
       ? templateSource
@@ -49,61 +47,137 @@ export const generateDocument = async (
     guestData[`guest${num}Passport`]    = guest.passportNumber;
     guestData[`guest${num}Nationality`] = guest.nationality;
     guestData[`guest${num}Phone`]       = guest.phone;
+    guestData[`guest${num}Birthplace`]  = guest.birthplace;
     guestData[`guest${num}Birthday`]    = guest.birthday ? formatDate(guest.birthday) : '';
+    // Combined "Place & Date of Birth" — matches "PLACE & DATE OF BIRTH" in template
+    guestData[`guest${num}PlaceAndDOB`] = [
+      guest.birthplace,
+      guest.birthday ? formatDate(guest.birthday) : '',
+    ].filter(Boolean).join(', ');
   });
 
-  // ── 2. Backward-compatible tags for templates built before the numbered
-  //       guest system existed ({{lesseeName}}, {{passportNumber}})
+  // ── 2. Backward-compatible legacy guest tags
   const primaryGuest = data.guests[0];
   const legacyGuestData: Record<string, string> = {
-    lesseeName:     primaryGuest?.name           ?? '',
-    passportNumber: primaryGuest?.passportNumber ?? '',
+    lesseeName:       primaryGuest?.name            ?? '',
+    passportNumber:   primaryGuest?.passportNumber  ?? '',
+    lesseeBirthplace: primaryGuest?.birthplace      ?? '',
+    lesseeBirthday:   primaryGuest?.birthday ? formatDate(primaryGuest.birthday) : '',
+    lesseePlaceAndDOB: [
+      primaryGuest?.birthplace,
+      primaryGuest?.birthday ? formatDate(primaryGuest.birthday) : '',
+    ].filter(Boolean).join(', '),
   };
 
-  // ── 3. Build the full template context
+  // ── 3. Inclusion Yes/No flags (for table rows like "Banjar Fee: Yes/No")
+  const inclusionYesNo = {
+    cleaning2xYesNo:  data.inclusions.cleaning2x  ? 'Yes' : 'No',
+    pool2xYesNo:      data.inclusions.pool2x       ? 'Yes' : 'No',
+    internetYesNo:    data.inclusions.internet     ? 'Yes' : 'No',
+    banjarFeeYesNo:   data.inclusions.banjarFee    ? 'Yes' : 'No',
+    rubbishFeeYesNo:  data.inclusions.rubbishFee   ? 'Yes' : 'No',
+    laundryYesNo:     data.inclusions.laundry      ? 'Yes' : 'No',
+    electricityYesNo: data.inclusions.electricity  ? 'Yes' : 'No',
+  };
+
+  // ── 4. Lessor / Property Owner tags
+  const lessor = data.lessor;
+  const lessorData = {
+    lessorName:        lessor.enabled ? lessor.name        : '',
+    lessorIdNumber:    lessor.enabled ? lessor.idNumber     : '',
+    lessorNationality: lessor.enabled ? lessor.nationality  : '',
+    lessorAddress:     lessor.enabled ? lessor.address      : '',
+    lessorPhone:       lessor.enabled ? lessor.phone        : '',
+    lessorEmail:       lessor.enabled ? lessor.email        : '',
+    hasLessor:         lessor.enabled,
+  };
+
+  // ── 5. Agent / PIC tags
+  const agent = data.agent;
+  const agentData = {
+    agentPicName:  agent.enabled ? agent.picName  : '',
+    agentCompany:  agent.enabled ? agent.company  : '',
+    agentPosition: agent.enabled ? agent.position : '',
+    agentPhone:    agent.enabled ? agent.phone     : '',
+    agentEmail:    agent.enabled ? agent.email     : '',
+    hasAgent:      agent.enabled,
+  };
+
+  // ── 6. Commission calculation base label
+  const isOwner = data.copyType === 'OWNER';
+  let commissionBaseLabel = '';
+  if (data.commissionType === 'percent_total')   commissionBaseLabel = `${data.commissionPercent}% of Total Rent`;
+  if (data.commissionType === 'percent_monthly') commissionBaseLabel = `${data.commissionPercent}% of Monthly Rent`;
+  if (data.commissionType === 'fixed')           commissionBaseLabel = 'Fixed Amount';
+
+  // ── 7. Build full template context
   const templateData = {
-    // Raw data
     ...data,
-    // Derived values
     ...computed,
-    // Legacy guest tags (backward compat)
     ...legacyGuestData,
-    // Numbered guest tags
     ...guestData,
+    ...inclusionYesNo,
+    ...lessorData,
+    ...agentData,
 
-    // Dates — use formatDate for consistent Indonesian format
-    checkInDate:     formatDate(data.checkInDate),
-    checkOutDate:    formatDate(data.checkOutDate),
-    paymentDueDate:  formatDate(data.paymentDueDate),
+    // Dates — consistent Indonesian format
+    checkInDate:    formatDate(data.checkInDate),
+    checkOutDate:   formatDate(data.checkOutDate),
+    paymentDueDate: formatDate(data.paymentDueDate),
 
-    // Currency — use shared formatIDR
+    // Currency — formatted IDR
     totalPrice:      formatIDR(data.totalPrice),
     monthlyPrice:    formatIDR(data.monthlyPrice),
     securityDeposit: formatIDR(computed.securityDeposit),
 
-    // Raw numeric values, in case the template needs math
+    // Raw numeric values
     totalPriceRaw:      data.totalPrice,
     monthlyPriceRaw:    data.monthlyPrice,
     securityDepositRaw: computed.securityDeposit,
+
+    // Copy type
+    copyType:     data.copyType,
+    isOwnerCopy:  data.copyType === 'OWNER',
+    isClientCopy: data.copyType === 'CLIENT',
+    isAgentCopy:  data.copyType === 'AGENT',
+
+    // Commission — only injected on OWNER copy
+    commissionType:        data.commissionType,
+    commissionTypeLabel:   commissionBaseLabel,
+    commissionPercent:     data.commissionPercent,
+    commissionAmount:      isOwner ? formatIDR(data.commissionAmount) : '',
+    commissionAmountRaw:   isOwner ? data.commissionAmount : 0,
+    commissionNotes:       isOwner ? data.commissionNotes : '',
+    netOwnerAmount:        isOwner ? formatIDR(data.totalPrice - data.commissionAmount) : '',
+    netOwnerAmountRaw:     isOwner ? data.totalPrice - data.commissionAmount : 0,
+
+    // Bank details — PT The Villa Managers / CIMB NIAGA (always injected)
+    bankName:        BANK.name,
+    bankBranch:      BANK.branch,
+    bankAccountName: BANK.accountName,
+    bankIDR:         BANK.idr,
+    bankAUD:         BANK.aud,
+    bankEUR:         BANK.eur,
+    bankSWIFT:       BANK.swift,
+    bankCode:        BANK.bankCode,
+    bankBranchCode:  BANK.branchCode,
   };
 
-  // ── 4. Render
+  // ── 8. Render
   try {
     doc.render(templateData);
   } catch (err: unknown) {
-    // Surface the actual Docxtemplater error (e.g. missing tag syntax)
     const message = err instanceof Error ? err.message : 'Unknown template error';
     throw new Error(`Template rendering failed: ${message}`);
   }
 
-  // ── 5. Build filename
+  // ── 9. Build filename with copy type suffix
   const guestFirstName = primaryGuest?.name?.split(' ')[0] || 'Guest';
   const villaSlug      = data.villaName
     ? data.villaName.replace(/\s+/g, '_')
     : 'Contract';
-  const filename = `Contract_${villaSlug}_${guestFirstName.replace(/\s+/g, '_')}.docx`;
+  const filename = `Contract_${villaSlug}_${guestFirstName.replace(/\s+/g, '_')}_${data.copyType}.docx`;
 
-  // ── 6. Return buffer + filename — caller decides download vs Drive upload
   const outBuffer = doc.getZip().generate({
     type: 'arraybuffer',
     mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
