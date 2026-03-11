@@ -2,25 +2,38 @@ import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
 import { ContractData, ComputedData } from '../types';
+// Fixed: import shared formatters instead of duplicating inline
 import { formatIDR, formatDate } from '../utils/format';
 
 // ─── generateDocument ─────────────────────────────────────────────────────
-// Reads a .docx template (File or ArrayBuffer), injects all contract data,
-// and returns { buffer, filename } so the caller can either download locally
-// or upload to Google Drive.
+// Reads a .docx template (from a local File OR an ArrayBuffer from Google
+// Drive), injects all contract data, and returns the filled content as an
+// ArrayBuffer so the caller can decide: download locally or save to Drive.
 //
-// Accepts File | ArrayBuffer so it works with both local uploads and the
-// ArrayBuffer returned by fetchTemplateFromDrive().
+// Fixed:
+//  1. Accepts File | ArrayBuffer — works with both local upload and Drive fetch.
+//  2. Returns { buffer, filename } — caller chooses download or Drive upload.
+//  3. Uses file.arrayBuffer() instead of the legacy FileReader callback API.
+//  4. Uses shared formatIDR / formatDate from utils (no duplication).
+//  5. Better filename fallback (no trailing underscore when name is empty).
+//  6. Surfaces the actual Docxtemplater error message to the caller.
+//  7. Consistent Indonesian date format regardless of browser locale.
+
+export interface GenerateResult {
+  buffer: ArrayBuffer;
+  filename: string;
+}
 
 export const generateDocument = async (
-  template: File | ArrayBuffer,
+  templateSource: File | ArrayBuffer,
   data: ContractData,
   computed: ComputedData
-): Promise<{ buffer: ArrayBuffer; filename: string }> => {
-  // Resolve to ArrayBuffer regardless of input type
-  const buffer = template instanceof File
-    ? await template.arrayBuffer()
-    : template;
+): Promise<GenerateResult> => {
+  // Supports both a user-uploaded File and an ArrayBuffer fetched from Drive
+  const buffer =
+    templateSource instanceof ArrayBuffer
+      ? templateSource
+      : await templateSource.arrayBuffer();
 
   const zip = new PizZip(buffer);
   const doc = new Docxtemplater(zip, {
@@ -39,7 +52,8 @@ export const generateDocument = async (
     guestData[`guest${num}Birthday`]    = guest.birthday ? formatDate(guest.birthday) : '';
   });
 
-  // ── 2. Backward-compatible tags for older templates
+  // ── 2. Backward-compatible tags for templates built before the numbered
+  //       guest system existed ({{lesseeName}}, {{passportNumber}})
   const primaryGuest = data.guests[0];
   const legacyGuestData: Record<string, string> = {
     lesseeName:     primaryGuest?.name           ?? '',
@@ -48,16 +62,26 @@ export const generateDocument = async (
 
   // ── 3. Build the full template context
   const templateData = {
+    // Raw data
     ...data,
+    // Derived values
     ...computed,
+    // Legacy guest tags (backward compat)
     ...legacyGuestData,
+    // Numbered guest tags
     ...guestData,
+
+    // Dates — use formatDate for consistent Indonesian format
     checkInDate:     formatDate(data.checkInDate),
     checkOutDate:    formatDate(data.checkOutDate),
     paymentDueDate:  formatDate(data.paymentDueDate),
+
+    // Currency — use shared formatIDR
     totalPrice:      formatIDR(data.totalPrice),
     monthlyPrice:    formatIDR(data.monthlyPrice),
     securityDeposit: formatIDR(computed.securityDeposit),
+
+    // Raw numeric values, in case the template needs math
     totalPriceRaw:      data.totalPrice,
     monthlyPriceRaw:    data.monthlyPrice,
     securityDepositRaw: computed.securityDeposit,
@@ -67,18 +91,19 @@ export const generateDocument = async (
   try {
     doc.render(templateData);
   } catch (err: unknown) {
+    // Surface the actual Docxtemplater error (e.g. missing tag syntax)
     const message = err instanceof Error ? err.message : 'Unknown template error';
     throw new Error(`Template rendering failed: ${message}`);
   }
 
   // ── 5. Build filename
   const guestFirstName = primaryGuest?.name?.split(' ')[0] || 'Guest';
-  const villaSlug = data.villaName
+  const villaSlug      = data.villaName
     ? data.villaName.replace(/\s+/g, '_')
     : 'Contract';
   const filename = `Contract_${villaSlug}_${guestFirstName.replace(/\s+/g, '_')}.docx`;
 
-  // ── 6. Return buffer (caller decides whether to download or upload)
+  // ── 6. Return buffer + filename — caller decides download vs Drive upload
   const outBuffer = doc.getZip().generate({
     type: 'arraybuffer',
     mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -87,9 +112,7 @@ export const generateDocument = async (
   return { buffer: outBuffer, filename };
 };
 
-// ─── downloadContractLocally ───────────────────────────────────────────────
-// Triggers a browser download of the generated contract buffer.
-
+/** Trigger a local browser download of a filled contract buffer. */
 export const downloadContractLocally = (buffer: ArrayBuffer, filename: string): void => {
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

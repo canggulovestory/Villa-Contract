@@ -127,7 +127,7 @@ export const TemplateGuide: React.FC = () => {
       {/* Legacy tags — collapsed by default */}
       <details className="group">
         <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-600 select-none">
-          ⬇ Show legacy tags (for older templates)
+          ▶ Show legacy tags (for older templates)
         </summary>
         <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
           {legacy.map((v) => (
@@ -144,8 +144,8 @@ export const TemplateGuide: React.FC = () => {
           ))}
         </div>
         <p className="text-xs text-amber-600 mt-2 bg-amber-50 p-2 rounded">
-          ⚠️ Legacy tags only reference Guest 1. Use <code>{'{' + '{guest1Name}' + '}'}</code> and{' '}
-          <code>{'{' + '{guest1Passport}' + '}'}</code> for new templates.
+          ⚠️ Legacy tags only reference Guest 1. Use <code>{'{{guest1Name}}'}</code> and{' '}
+          <code>{'{{guest1Passport}}'}</code> for new templates.
         </p>
       </details>
     </div>

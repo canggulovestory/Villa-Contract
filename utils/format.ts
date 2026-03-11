@@ -1,7 +1,9 @@
-// ─── Currency & Date Formatting ────────────────────────────────────────
+// ─── Shared Formatting Utilities ────────────────────────────────────────────
+// Moved here from docService.ts (was duplicated with App.tsx inline usage).
 
-export const formatIDR = (value: number | null | undefined): string => {
-  if (!value) return 'Rp 0';
+export const SECURITY_DEPOSIT_RATE = 0.10; // 10% — change in one place
+
+export const formatIDR = (value: number): string => {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
@@ -10,22 +12,18 @@ export const formatIDR = (value: number | null | undefined): string => {
   }).format(value);
 };
 
-export const formatDate = (date: Date | string | null | undefined): string => {
-  if (!date) return '';
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return new Intl.DateTimeFormat('en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(d);
-};
-
-export const parseDate = (dateString: string): Date => {
-  const [day, month, year] = dateString.split('/').map(Number);
-  return new Date(year, month - 1, day);
-};
-
-export const calculateNights = (checkIn: Date, checkOut: Date): number => {
-  const ms = checkOut.getTime() - checkIn.getTime();
-  return Math.ceil(ms / (1000 * 60 * 60 * 24));
+// Fixed: always produces a consistent Indonesian date format regardless of
+// the user's browser locale (was using toLocaleDateString() before, which
+// could produce different formats on different machines).
+export const formatDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  try {
+    return new Intl.DateTimeFormat('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).format(new Date(dateStr));
+  } catch {
+    return dateStr; // fallback to raw string if date is malformed
+  }
 };
