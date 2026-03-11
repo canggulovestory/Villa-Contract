@@ -138,6 +138,7 @@ const App: React.FC = () => {
   const [autoFillMsg, setAutoFillMsg]             = useState('');
   const [commissionOpen, setCommissionOpen]       = useState(false);
   const [activeDurationPill, setActiveDurationPill] = useState<string>('');
+  const [customWeeks, setCustomWeeks]               = useState<string>('2');
   const [savedOwners, setSavedOwners]             = useState<LessorData[]>([]);
   const [savedAgents, setSavedAgents]             = useState<AgentData[]>([]);
   const isPriceManuallySet                        = useRef(false);
@@ -412,23 +413,29 @@ const App: React.FC = () => {
 
   // ─── Quick Duration Pill logic ────────────────────────────────────────────
   const DURATION_PILLS = [
-    { label: '1 Week',   months: 0,  days: 7  },
-    { label: '2 Weeks',  months: 0,  days: 14 },
-    { label: '1 Month',  months: 1,  days: 0  },
-    { label: '2 Months', months: 2,  days: 0  },
-    { label: '3 Months', months: 3,  days: 0  },
-    { label: '6 Months', months: 6,  days: 0  },
-    { label: '1 Year',   months: 12, days: 0  },
+    { label: '1 Month',  months: 1,  days: 0 },
+    { label: '2 Months', months: 2,  days: 0 },
+    { label: '3 Months', months: 3,  days: 0 },
+    { label: '6 Months', months: 6,  days: 0 },
+    { label: '1 Year',   months: 12, days: 0 },
   ];
-  const handleDurationPill = (label: string, months: number, days: number) => {
+  const applyDuration = (months: number, days: number) => {
     if (!data.checkInDate) return;
     const d = new Date(data.checkInDate + 'T00:00:00');
     if (months > 0) d.setMonth(d.getMonth() + months);
     if (days   > 0) d.setDate(d.getDate() + days);
-    const checkOut = d.toISOString().split('T')[0];
-    handleInputChange('checkOutDate', checkOut);
+    handleInputChange('checkOutDate', d.toISOString().split('T')[0]);
     isPriceManuallySet.current = false;
+  };
+  const handleDurationPill = (label: string, months: number, days: number) => {
+    applyDuration(months, days);
     setActiveDurationPill(label);
+  };
+  const handleApplyCustomWeeks = (weeksStr: string) => {
+    const w = parseInt(weeksStr, 10);
+    if (!w || w < 1) return;
+    applyDuration(0, w * 7);
+    setActiveDurationPill('Other');
   };
 
   // ─── Inclusion items ──────────────────────────────────────────────────────
@@ -704,43 +711,77 @@ const App: React.FC = () => {
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <SectionHeader num={3} icon={<Calendar className="w-4 h-4 text-emerald-600" />} title="Stay Details" />
                 <div className="px-6 py-5 space-y-4">
-                  {/* Quick Duration Pill Buttons */}
+
+                  {/* 1 — Check-in Date (first, so user sets it before clicking a pill) */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Check-in Date <span className="text-red-400">*</span></label>
+                    <input type="date" value={data.checkInDate} onChange={e => handleInputChange('checkInDate', e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition" />
+                  </div>
+
+                  {/* 2 — Quick Duration Pills */}
                   <div>
                     <p className="text-xs font-semibold text-slate-500 mb-2 flex items-center gap-1.5">
-                      <span>⚡</span> Quick Duration
+                      <span>🗓</span> Quick Duration
                       {!data.checkInDate && <span className="text-amber-500 font-normal ml-1">— set check-in first</span>}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {DURATION_PILLS.map(({ label, months, days }) => (
-                        <button
-                          key={label}
-                          type="button"
+                        <button key={label} type="button"
                           onClick={() => handleDurationPill(label, months, days)}
                           disabled={!data.checkInDate}
                           className={`px-3 py-1.5 rounded-full text-xs font-bold border-2 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
                             activeDurationPill === label
                               ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
                               : 'bg-white border-emerald-200 text-emerald-700 hover:border-emerald-500 hover:bg-emerald-50'
-                          }`}
-                        >
+                          }`}>
                           {label}
                         </button>
                       ))}
+                      {/* Other — custom weeks */}
+                      <button type="button"
+                        onClick={() => setActiveDurationPill(activeDurationPill === 'Other' ? '' : 'Other')}
+                        disabled={!data.checkInDate}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold border-2 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                          activeDurationPill === 'Other'
+                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-500 hover:border-emerald-300 hover:bg-emerald-50'
+                        }`}>
+                        Other…
+                      </button>
                     </div>
+
+                    {/* Custom weeks input — shown when Other is selected */}
+                    {activeDurationPill === 'Other' && (
+                      <div className="mt-3 flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                        <span className="text-xs font-semibold text-emerald-700 flex-shrink-0">Number of weeks:</span>
+                        <input
+                          type="number" min={1} max={52}
+                          value={customWeeks}
+                          onChange={e => {
+                            setCustomWeeks(e.target.value);
+                            handleApplyCustomWeeks(e.target.value);
+                          }}
+                          className="w-16 px-2 py-1 border-2 border-emerald-300 rounded-lg text-sm font-bold text-emerald-900 text-center outline-none focus:border-emerald-500 transition bg-white"
+                        />
+                        <span className="text-xs font-semibold text-emerald-700">weeks</span>
+                        {data.checkOutDate && (
+                          <span className="text-xs text-emerald-600 ml-1">
+                            → {new Date(data.checkOutDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Check-in Date <span className="text-red-400">*</span></label>
-                      <input type="date" value={data.checkInDate} onChange={e => handleInputChange('checkInDate', e.target.value)}
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Check-out Date <span className="text-red-400">*</span></label>
-                      <input type="date" value={data.checkOutDate} onChange={e => handleInputChange('checkOutDate', e.target.value)}
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition" />
-                    </div>
+                  {/* 3 — Check-out Date */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Check-out Date <span className="text-red-400">*</span></label>
+                    <input type="date" value={data.checkOutDate} onChange={e => handleInputChange('checkOutDate', e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition" />
                   </div>
+
+                  {/* 4 — Duration summary */}
                   <div className={`rounded-xl overflow-hidden border transition-all ${computedData.numberOfNights > 0 ? 'border-emerald-200' : 'border-slate-100'}`}>
                     <div className={`px-4 py-2 border-b ${computedData.numberOfNights > 0 ? 'bg-emerald-600/10 border-emerald-200' : 'bg-slate-50 border-slate-100'}`}>
                       <span className="text-xs font-bold uppercase tracking-widest text-emerald-700">Duration</span>
@@ -750,13 +791,19 @@ const App: React.FC = () => {
                         <span className="block text-2xl font-bold text-emerald-800">{computedData.numberOfNights}</span>
                         <span className="text-xs text-emerald-600 font-semibold uppercase tracking-wide">Nights</span>
                       </div>
-                      <div className="w-px h-10 bg-emerald-200" />
-                      <div className="text-center">
-                        <span className="block text-2xl font-bold text-emerald-800">{computedData.numberOfMonths}</span>
-                        <span className="text-xs text-emerald-600 font-semibold uppercase tracking-wide">Months</span>
-                      </div>
+                      {/* Only show months when ≥ 1 — "0.2 months" is misleading for short stays */}
+                      {computedData.numberOfMonths >= 1 && (
+                        <>
+                          <div className="w-px h-10 bg-emerald-200" />
+                          <div className="text-center">
+                            <span className="block text-2xl font-bold text-emerald-800">{computedData.numberOfMonths}</span>
+                            <span className="text-xs text-emerald-600 font-semibold uppercase tracking-wide">Months</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
+
                 </div>
               </section>
 
