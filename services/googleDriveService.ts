@@ -9,8 +9,16 @@ const CLIENT_ID       = '507384430794-f2699okdpdv912dbtsvhs702khbchcn5.apps.goog
 const API_KEY         = 'AIzaSyALPN_RpFprlabHCHpP4VVF8IsyzzxiWaM';
 const TEMPLATE_FILE_ID        = '1FaI-tBUkg2a8HBB4mGNoJ87z7p9AOX8x';  // 3rd Party / Agent contract
 const DIRECT_TEMPLATE_FILE_ID = '1VNRv7DISC6kpEY-z3_1bUFaF5tVbaxOu';  // Direct / Guest contract
-const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
+const SCOPES = [
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/spreadsheets.readonly',
+].join(' ');
 const ROOT_FOLDER_NAME = 'Villa Contracts - TVM';
+
+// ─── Sheets / Villa List ──────────────────────────────────────────────────────
+const VILLA_SHEET_ID  = '1eJlvzO0t-Y1sz5E_DTMvuqjcbgpgl_d-SIgUMF83lic';
+const VILLA_SHEET_GID = 1674333214;
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let accessToken: string | null = null;
@@ -312,5 +320,74 @@ export const saveContractToDrive = async (
 };
 
 export const getTemplateFileId = (): string => TEMPLATE_FILE_ID;
+
+// ─── Villa List from Sheets ───────────────────────────────────────────────────
+
+export interface VillaRow {
+  name: string;
+  address: string;
+  bedrooms: number;
+  propertyCode: string;
+}
+
+/**
+ * Fetch the villa list from the configured Google Sheet.
+ * 1. Resolves VILLA_SHEET_GID → sheet title via spreadsheets metadata.
+ * 2. Fetches the sheet values (first 500 rows).
+ * 3. Maps header columns dynamically (case-insensitive) to VillaRow fields.
+ */
+export const fetchVillaListFromSheets = async (): Promise<VillaRow[]> => {
+  if (!accessToken) throw new Error('Not signed in to Google');
+
+  // Step 1: get sheet name from GID
+  const metaRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${VILLA_SHEET_ID}?fields=sheets.properties`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!metaRes.ok) throw new Error(`Sheets metadata error: ${metaRes.status}`);
+  const meta = await metaRes.json();
+  const sheetProps = (meta.sheets as any[]).find(
+    (s: any) => s.properties.sheetId === VILLA_SHEET_GID
+  )?.properties;
+  if (!sheetProps) throw new Error(`Sheet with GID ${VILLA_SHEET_GID} not found`);
+  const sheetTitle: string = sheetProps.title;
+
+  // Step 2: fetch values
+  const range = encodeURIComponent(`${sheetTitle}!A1:Z500`);
+  const valRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${VILLA_SHEET_ID}/values/${range}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!valRes.ok) throw new Error(`Sheets values error: ${valRes.status}`);
+  const valJson = await valRes.json();
+  const rows: string[][] = valJson.values ?? [];
+  if (rows.length < 2) return [];
+
+  // Step 3: map headers
+  const headers = rows[0].map((h: string) => h.trim().toLowerCase());
+  const colIdx = (keys: string[]): number =>
+    headers.findIndex(h => keys.some(k => h.includes(k)));
+
+  const nameCol    = colIdx(['villa name', 'name', 'villa']);
+  const addrCol    = colIdx(['address', 'location', 'alamat']);
+  const bedroomCol = colIdx(['bedroom', 'br ', ' br', 'beds', 'kamar']);
+  const codeCol    = colIdx(['code', 'kode', 'ref', 'property code']);
+
+  if (nameCol === -1) throw new Error('Could not find a "name" column in the villa sheet');
+
+  const villas: VillaRow[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const name = r[nameCol]?.trim();
+    if (!name) continue;           // skip empty rows
+    villas.push({
+      name,
+      address:      addrCol    !== -1 ? (r[addrCol]    ?? '').trim() : '',
+      bedrooms:     bedroomCol !== -1 ? (parseInt(r[bedroomCol] ?? '1') || 1) : 1,
+      propertyCode: codeCol    !== -1 ? (r[codeCol]    ?? '').trim() : '',
+    });
+  }
+  return villas;
+};
 
 declare const google: any;

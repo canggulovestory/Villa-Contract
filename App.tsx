@@ -11,6 +11,7 @@ import { generateDocument, downloadContractLocally } from './services/docService
 import {
   initGoogleAuth, isSignedIn, signInToGoogle, signOutFromGoogle,
   fetchTemplateFromDrive, fetchDirectTemplateFromDrive,
+  fetchVillaListFromSheets, VillaRow,
   saveContractToDrive, saveDealToDrive, PassportFile,
 } from './services/googleDriveService';
 import { TemplateGuide } from './components/TemplateGuide';
@@ -121,6 +122,7 @@ const App: React.FC = () => {
   const [autoTemplate, setAutoTemplate]           = useState<ArrayBuffer | null>(null);       // 3rd Party template
   const [autoDirectTemplate, setAutoDirectTemplate] = useState<ArrayBuffer | null>(null);    // Direct / Guest template
   const [templateBanner, setTemplateBanner]       = useState('');
+  const [sheetVillas, setSheetVillas]             = useState<VillaRow[]>([]);               // Live villa list from Sheets
   const [isGenerating, setIsGenerating]           = useState(false);
   const [formErrors, setFormErrors]               = useState<string[]>([]);
   const [generateError, setGenerateError]         = useState<string>('');
@@ -153,17 +155,20 @@ const App: React.FC = () => {
     } catch { /* ignore */ }
   }, []);
 
-  // ─── Auto-load BOTH templates from Drive on connect ─────────────────────
+  // ─── Auto-load BOTH templates + villa list from Drive/Sheets on connect ──
   useEffect(() => {
     if (!driveConnected) return;
     setTemplateBanner('loading');
-    Promise.all([fetchTemplateFromDrive(), fetchDirectTemplateFromDrive()])
-      .then(([buf3p, bufDirect]) => {
-        setAutoTemplate(buf3p);
-        setAutoDirectTemplate(bufDirect);
-        setTemplateBanner('loaded');
-      })
-      .catch(() => setTemplateBanner('failed'));
+    Promise.all([
+      fetchTemplateFromDrive(),
+      fetchDirectTemplateFromDrive(),
+      fetchVillaListFromSheets().catch(() => [] as VillaRow[]), // non-fatal
+    ]).then(([buf3p, bufDirect, villas]) => {
+      setAutoTemplate(buf3p);
+      setAutoDirectTemplate(bufDirect);
+      setTemplateBanner('loaded');
+      setSheetVillas(villas);
+    }).catch(() => setTemplateBanner('failed'));
   }, [driveConnected]);
 
   // ─── computedData ────────────────────────────────────────────────────────
@@ -280,8 +285,14 @@ const App: React.FC = () => {
   const handleVillaTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = e.target.value;
     if (selected === 'custom') {
-      setData(prev => ({ ...prev, villaName: '', villaAddress: '', bedrooms: 1 }));
+      setData(prev => ({ ...prev, villaName: '', villaAddress: '', bedrooms: 1, propertyCode: '' }));
     } else {
+      // Check sheet villas first (live data), fall back to local templates
+      const sv = sheetVillas.find(v => v.name === selected);
+      if (sv) {
+        setData(prev => ({ ...prev, villaName: sv.name, villaAddress: sv.address, bedrooms: sv.bedrooms, propertyCode: sv.propertyCode || prev.propertyCode }));
+        return;
+      }
       const t = VILLA_TEMPLATES.find(v => v.name === selected);
       if (t) setData(prev => ({ ...prev, villaName: t.name, villaAddress: t.address, bedrooms: t.bedrooms }));
     }
@@ -422,6 +433,7 @@ const App: React.FC = () => {
   const handleDisconnectDrive = () => {
     signOutFromGoogle(); setDriveConnected(false); setDriveStatus('');
     setSavedDriveLink(''); setAutoTemplate(null); setAutoDirectTemplate(null); setTemplateBanner('');
+    setSheetVillas([]);
   };
   /** Resolve the Direct / Guest lease template (for the "Download Contract" button). */
   const resolveTemplate = async (): Promise<File | ArrayBuffer | null> => {
@@ -654,6 +666,7 @@ const App: React.FC = () => {
                 data={data}
                 handleInputChange={handleInputChange}
                 onVillaTemplateChange={handleVillaTemplateChange}
+                sheetVillas={sheetVillas}
               />
 
               <Section2Guests

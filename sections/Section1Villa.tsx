@@ -2,15 +2,17 @@ import React from 'react';
 import { Home, ChevronDown } from 'lucide-react';
 import { ContractData, HandleChange } from '../types';
 import { VILLA_TEMPLATES } from '../data/villaTemplates';
+import { VillaRow } from '../services/googleDriveService';
 import { SectionHeader } from '../components/SectionHeader';
 
 interface Props {
   data: ContractData;
   handleInputChange: HandleChange;
   onVillaTemplateChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  sheetVillas?: VillaRow[];
 }
 
-export const Section1Villa: React.FC<Props> = ({ data, handleInputChange, onVillaTemplateChange }) => (
+export const Section1Villa: React.FC<Props> = ({ data, handleInputChange, onVillaTemplateChange, sheetVillas = [] }) => (
   <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
     <SectionHeader
       num={1}
@@ -23,9 +25,18 @@ export const Section1Villa: React.FC<Props> = ({ data, handleInputChange, onVill
             defaultValue=""
             className="appearance-none pl-3 pr-8 py-2 text-sm border border-emerald-200 bg-emerald-50 text-emerald-800 font-semibold rounded-xl focus:ring-2 focus:ring-emerald-400 outline-none cursor-pointer transition"
           >
-            <option value="" disabled>Load Villa Template…</option>
+            <option value="" disabled>
+              {sheetVillas.length > 0 ? `Load Villa… (${sheetVillas.length} from Sheets)` : 'Load Villa Template…'}
+            </option>
             <option value="custom">✏ Custom / New Villa</option>
-            <optgroup label="Saved Villas">
+            {sheetVillas.length > 0 && (
+              <optgroup label="📋 Live from Google Sheets">
+                {sheetVillas.map(v => (
+                  <option key={v.name} value={v.name}>{v.name}</option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label={sheetVillas.length > 0 ? 'Local Fallback Templates' : 'Saved Villas'}>
               {VILLA_TEMPLATES.map(v => (
                 <option key={v.name} value={v.name}>{v.name}</option>
               ))}
