@@ -659,11 +659,19 @@ const App: React.FC = () => {
                   }
                 />
                 <div className="px-6 py-5 space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Villa Name <span className="text-red-400">*</span></label>
-                    <input type="text" value={data.villaName} onChange={e => handleInputChange('villaName', e.target.value)}
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"
-                      placeholder="e.g. Villa Sentosa" />
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Villa Name <span className="text-red-400">*</span></label>
+                      <input type="text" value={data.villaName} onChange={e => handleInputChange('villaName', e.target.value)}
+                        className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"
+                        placeholder="e.g. Villa Sentosa" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Property Code</label>
+                      <input type="text" value={data.propertyCode} onChange={e => handleInputChange('propertyCode', e.target.value)}
+                        className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"
+                        placeholder="e.g. VS-001" />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Villa Address <span className="text-red-400">*</span></label>
@@ -875,12 +883,35 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Payment Due Date */}
-                  <div className="max-w-xs">
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Payment Due Date</label>
-                    <input type="date" value={data.paymentDueDate}
-                      onChange={e => handleInputChange('paymentDueDate', e.target.value)}
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition" />
+                  {/* Payment Schedule — 3 fields matching template {{firstPaymentAmount}}, {{firstPaymentDueDate}}, {{followingPayments}} */}
+                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <div className="px-4 py-2 bg-slate-50 border-b border-slate-100">
+                      <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Payment Schedule</span>
+                    </div>
+                    <div className="px-4 py-4 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1.5">First Payment Amount</label>
+                          <input type="text" value={data.firstPaymentAmount}
+                            onChange={e => handleInputChange('firstPaymentAmount', e.target.value)}
+                            className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"
+                            placeholder="e.g. IDR 3,000,000 (security deposit)" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1.5">First Payment Due Date</label>
+                          <input type="date" value={data.paymentDueDate}
+                            onChange={e => handleInputChange('paymentDueDate', e.target.value)}
+                            className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Following Payments</label>
+                        <input type="text" value={data.followingPayments}
+                          onChange={e => handleInputChange('followingPayments', e.target.value)}
+                          className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-400 outline-none transition"
+                          placeholder="e.g. Balance of IDR 27,000,000 due on check-in date" />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Commission — collapsible amber panel */}

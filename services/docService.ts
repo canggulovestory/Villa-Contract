@@ -138,6 +138,36 @@ export const generateDocument = async (
   if (data.commissionType === 'percent_monthly') commissionBaseLabel = `${data.commissionPercent}% of Monthly Rent`;
   if (data.commissionType === 'fixed')           commissionBaseLabel = 'Fixed Amount';
 
+  // ── 6b. Template-exact aliases — these names match {{tag}} in LEASE_AGREEMENT_FINAL.docx
+  const today = new Date().toISOString().split('T')[0];
+  const templateExactAliases = {
+    // {{createdDate}} — date the contract is generated
+    createdDate: formatDate(today),
+
+    // {{birthday}} — "Place & Date of Birth" combined (matches template row label)
+    birthday: legacyGuestData.lesseePlaceAndDOB,
+
+    // {{nationality}} / {{phone}} — short aliases for primary guest fields
+    nationality: primaryGuest?.nationality ?? '',
+    phone:       primaryGuest?.phone       ?? '',
+
+    // {{propertyCode}} — property reference code
+    propertyCode: data.propertyCode ?? '',
+
+    // {{firstPaymentAmount}} — first payment amount (free text)
+    firstPaymentAmount: data.firstPaymentAmount ?? '',
+
+    // {{firstPaymentDueDate}} — alias for paymentDueDate
+    firstPaymentDueDate: formatDate(data.paymentDueDate),
+
+    // {{followingPayments}} — free text description of subsequent payments
+    followingPayments: data.followingPayments ?? '',
+
+    // Signature placeholders — left blank for manual signing
+    lessorSignature: '',
+    lesseeSignature: '',
+  };
+
   // ── 7. Build full template context
   const templateData = {
     ...data,
@@ -147,6 +177,7 @@ export const generateDocument = async (
     ...inclusionYesNo,
     ...lessorData,
     ...agentData,
+    ...templateExactAliases,   // ← must come AFTER guestData/legacyGuestData so aliases win
 
     // Dates — consistent Indonesian format
     checkInDate:    formatDate(data.checkInDate),

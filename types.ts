@@ -91,7 +91,12 @@ export interface ContractData {
   // Financials (IDR)
   monthlyPrice: number;
   totalPrice: number;
-  paymentDueDate: string;
+  paymentDueDate: string;        // kept for backward compat; docService also maps → firstPaymentDueDate
+  firstPaymentAmount: string;    // free text e.g. "IDR 3,000,000 (security deposit)"
+  followingPayments: string;     // free text e.g. "Balance due on check-in date"
+
+  // Property Code
+  propertyCode: string;          // e.g. "VS-001", maps → {{propertyCode}} in template
 
   // Commission (for OWNER copy)
   commissionType: CommissionType;    // basis for commission calculation
@@ -185,12 +190,15 @@ export const INITIAL_DATA: ContractData = {
   villaName: '',
   villaAddress: '',
   bedrooms: 1,
+  propertyCode: '',
   guests: [makeNewGuest(1)],
   checkInDate: '',
   checkOutDate: '',
   monthlyPrice: 0,
   totalPrice: 0,
   paymentDueDate: '',
+  firstPaymentAmount: '',
+  followingPayments: '',
   commissionType: 'percent_total',
   commissionPercent: 0,
   commissionAmount: 0,
