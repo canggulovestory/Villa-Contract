@@ -137,6 +137,7 @@ const App: React.FC = () => {
   const [autoFillOpen, setAutoFillOpen]           = useState(true);
   const [autoFillMsg, setAutoFillMsg]             = useState('');
   const [commissionOpen, setCommissionOpen]       = useState(false);
+  const [activeDurationPill, setActiveDurationPill] = useState<string>('');
   const [savedOwners, setSavedOwners]             = useState<LessorData[]>([]);
   const [savedAgents, setSavedAgents]             = useState<AgentData[]>([]);
   const isPriceManuallySet                        = useRef(false);
@@ -208,6 +209,9 @@ const App: React.FC = () => {
     setData(prev => ({ ...prev, [field]: value }));
     if (field === 'monthlyPrice' || field === 'checkInDate' || field === 'checkOutDate') {
       isPriceManuallySet.current = false;
+    }
+    if (field === 'checkInDate' || field === 'checkOutDate') {
+      setActiveDurationPill(''); // clear pill highlight on manual date change
     }
   };
   const handleTotalPriceChange = (value: number) => {
@@ -404,6 +408,27 @@ const App: React.FC = () => {
       setDriveStatus('Saved to Drive ✓');
     } catch (e: unknown) { setGenerateError(e instanceof Error ? e.message : 'Error saving to Drive.'); setDriveStatus(''); }
     finally { setIsGenerating(false); }
+  };
+
+  // ─── Quick Duration Pill logic ────────────────────────────────────────────
+  const DURATION_PILLS = [
+    { label: '1 Week',   months: 0,  days: 7  },
+    { label: '2 Weeks',  months: 0,  days: 14 },
+    { label: '1 Month',  months: 1,  days: 0  },
+    { label: '2 Months', months: 2,  days: 0  },
+    { label: '3 Months', months: 3,  days: 0  },
+    { label: '6 Months', months: 6,  days: 0  },
+    { label: '1 Year',   months: 12, days: 0  },
+  ];
+  const handleDurationPill = (label: string, months: number, days: number) => {
+    if (!data.checkInDate) return;
+    const d = new Date(data.checkInDate + 'T00:00:00');
+    if (months > 0) d.setMonth(d.getMonth() + months);
+    if (days   > 0) d.setDate(d.getDate() + days);
+    const checkOut = d.toISOString().split('T')[0];
+    handleInputChange('checkOutDate', checkOut);
+    isPriceManuallySet.current = false;
+    setActiveDurationPill(label);
   };
 
   // ─── Inclusion items ──────────────────────────────────────────────────────
@@ -679,6 +704,31 @@ const App: React.FC = () => {
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <SectionHeader num={3} icon={<Calendar className="w-4 h-4 text-emerald-600" />} title="Stay Details" />
                 <div className="px-6 py-5 space-y-4">
+                  {/* Quick Duration Pill Buttons */}
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 mb-2 flex items-center gap-1.5">
+                      <span>⚡</span> Quick Duration
+                      {!data.checkInDate && <span className="text-amber-500 font-normal ml-1">— set check-in first</span>}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {DURATION_PILLS.map(({ label, months, days }) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => handleDurationPill(label, months, days)}
+                          disabled={!data.checkInDate}
+                          className={`px-3 py-1.5 rounded-full text-xs font-bold border-2 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                            activeDurationPill === label
+                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
+                              : 'bg-white border-emerald-200 text-emerald-700 hover:border-emerald-500 hover:bg-emerald-50'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">Check-in Date <span className="text-red-400">*</span></label>
