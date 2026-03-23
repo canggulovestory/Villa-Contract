@@ -61,7 +61,12 @@ function validateForm(data: ContractData, computed: ComputedData): string[] {
 
 // ─── Smart Auto-Fill Parser ───────────────────────────────────────────────────
 function parseRawText(raw: string) {
-  const txt = raw;
+  // Normalise common separators used in WhatsApp messages (· | / •) into newlines
+  // so every field lands on its own line and regexes don't bleed across fields.
+  const txt = raw
+    .replace(/\s*[·•|]\s*/g, '\n')   // middle-dot, bullet, pipe → newline
+    .replace(/\r\n/g, '\n');
+
   const extract = (patterns: RegExp[]): string => {
     for (const p of patterns) {
       const m = txt.match(p);
@@ -93,16 +98,16 @@ function parseRawText(raw: string) {
     return '';
   };
 
-  const name        = extract([/(?:guest|name|tenant|tamu)[:\s*]+([^\n,\r]+)/i]);
-  const nationality = extract([/(?:nationality|citizen(?:ship)?|warga)[:\s*]+([^\n,\r]+)/i]);
-  const passport    = extract([/(?:passport|paspor)(?:\s*(?:no|number|#|:))[:\s*]*([A-Z0-9]+)/i,
-                                /(?:passport|paspor)[:\s*]+([A-Z0-9]+)/i]);
-  const phone       = extract([/(?:phone|tel|hp|wa|whatsapp|mobile)[:\s*]+([\+\d\s\-()]+)/i]);
-  const villaName   = extract([/(?:villa|property|rumah)[:\s*]+([^\n,\r]+)/i]);
-  const checkInRaw  = extract([/check[-\s]?in[:\s*]+([^\n\r]+)/i, /arrival[:\s*]+([^\n\r]+)/i, /masuk[:\s*]+([^\n\r]+)/i]);
-  const checkOutRaw = extract([/check[-\s]?out[:\s*]+([^\n\r]+)/i, /departure[:\s*]+([^\n\r]+)/i, /keluar[:\s*]+([^\n\r]+)/i]);
-  const monthly     = extractNum([/monthly(?:\s*(?:price|rent|rate))?[:\s*]+([\d,.]+)/i, /per\s*month[:\s*]+([\d,.]+)/i]);
-  const total       = extractNum([/total(?:\s*(?:price|amount|payment))?[:\s*]+([\d,.]+)/i]);
+  // Stop capture at newline or comma (· and | already converted to newlines above)
+  const name        = extract([/(?:guest|name|tenant|tamu)[:\s]+([^\n,\r]+)/i]);
+  const nationality = extract([/(?:nationality|citizen(?:ship)?|warga)[:\s]+([^\n,\r]+)/i]);
+  const passport    = extract([/(?:passport|paspor)(?:\s*(?:no|number|#|num))?[:\s]+([A-Z0-9]+)/i]);
+  const phone       = extract([/(?:phone|tel|hp|wa|whatsapp|mobile)[:\s]+([\+\d\s\-()]+)/i]);
+  const villaName   = extract([/(?:villa|property|rumah)[:\s]+([^\n,\r]+)/i]);
+  const checkInRaw  = extract([/check[-\s]?in[:\s]+([^\n\r]+)/i, /arrival[:\s]+([^\n\r]+)/i, /masuk[:\s]+([^\n\r]+)/i]);
+  const checkOutRaw = extract([/check[-\s]?out[:\s]+([^\n\r]+)/i, /departure[:\s]+([^\n\r]+)/i, /keluar[:\s]+([^\n\r]+)/i]);
+  const monthly     = extractNum([/monthly(?:\s*(?:price|rent|rate))?[:\s]+([\d,.]+)/i, /per\s*month[:\s]+([\d,.]+)/i]);
+  const total       = extractNum([/total(?:\s*(?:price|amount|payment))?[:\s]+([\d,.]+)/i]);
 
   return {
     name, nationality, passport,
@@ -403,32 +408,46 @@ const App: React.FC = () => {
   const handleAutoFill = () => {
     if (!autoFillText.trim()) return;
     const parsed = parseRawText(autoFillText);
+
+    // Count filled fields BEFORE setData (avoids async closure issue)
     let filled = 0;
+    if (parsed.villaName)    filled++;
+    if (parsed.checkInDate)  filled++;
+    if (parsed.checkOutDate) filled++;
+    if (parsed.monthlyPrice) filled++;
+    if (parsed.totalPrice)   filled++;
+    if (parsed.name)         filled++;
+    if (parsed.passport)     filled++;
+    if (parsed.nationality)  filled++;
+    if (parsed.phone)        filled++;
+
+    if (filled === 0) {
+      setAutoFillMsg('⚠ No matching fields found — try adding labels like "Guest:", "Check-in:", "Villa:", etc.');
+      setTimeout(() => setAutoFillMsg(''), 5000);
+      return;
+    }
+
     setData(prev => {
       const next = { ...prev };
-      if (parsed.villaName)    { next.villaName    = parsed.villaName;   filled++; }
-      if (parsed.checkInDate)  { next.checkInDate  = parsed.checkInDate; filled++; setIsPriceManuallySet(false); }
-      if (parsed.checkOutDate) { next.checkOutDate = parsed.checkOutDate; filled++; setIsPriceManuallySet(false); }
-      if (parsed.monthlyPrice) { next.monthlyPrice = parsed.monthlyPrice; filled++; setIsPriceManuallySet(false); }
-      if (parsed.totalPrice)   { next.totalPrice   = parsed.totalPrice;  filled++; setIsPriceManuallySet(true); }
+      if (parsed.villaName)    next.villaName     = parsed.villaName;
+      if (parsed.checkInDate)  { next.checkInDate  = parsed.checkInDate;  setIsPriceManuallySet(false); }
+      if (parsed.checkOutDate) { next.checkOutDate = parsed.checkOutDate; setIsPriceManuallySet(false); }
+      if (parsed.monthlyPrice) { next.monthlyPrice = parsed.monthlyPrice; setIsPriceManuallySet(false); }
+      if (parsed.totalPrice)   { next.totalPrice   = parsed.totalPrice;   setIsPriceManuallySet(true); }
       if (parsed.name || parsed.passport || parsed.nationality || parsed.phone) {
         const guest = { ...next.guests[0] };
-        if (parsed.name)        { guest.name          = parsed.name;       filled++; }
-        if (parsed.passport)    { guest.passportNumber = parsed.passport;  filled++; }
-        if (parsed.nationality) { guest.nationality   = parsed.nationality; filled++; }
-        if (parsed.phone)       { guest.phone         = parsed.phone;      filled++; }
+        if (parsed.name)        guest.name           = parsed.name;
+        if (parsed.passport)    guest.passportNumber = parsed.passport;
+        if (parsed.nationality) guest.nationality    = parsed.nationality;
+        if (parsed.phone)       guest.phone          = parsed.phone;
         next.guests = [guest, ...next.guests.slice(1)];
       }
       return next;
     });
-    if (filled > 0) {
-      setAutoFillMsg(`✓ Auto-filled ${filled} field${filled > 1 ? 's' : ''}`);
-      setAutoFillOpen(false);
-      setTimeout(() => setAutoFillMsg(''), 4000);
-    } else {
-      setAutoFillMsg('⚠ No matching fields found — try adding labels like "Guest:", "Check-in:", etc.');
-      setTimeout(() => setAutoFillMsg(''), 4000);
-    }
+
+    setAutoFillMsg(`✓ Auto-filled ${filled} field${filled > 1 ? 's' : ''}`);
+    setAutoFillOpen(false);
+    setTimeout(() => setAutoFillMsg(''), 4000);
   };
 
   // ─── Drive ────────────────────────────────────────────────────────────────
