@@ -59,7 +59,9 @@ function validateForm(data: ContractData, computed: ComputedData): string[] {
   return errors;
 }
 
-// ─── Smart Auto-Fill Parser ───────────────────────────────────────────────────
+// ─── Smart Auto-Fill Parser v2 — ULTRA-FLEXIBLE ─────────────────────────────
+// Handles: WhatsApp messages, emails, structured text, comma-separated,
+// line-separated, any separator (: = | · •), Indonesian numbers, multiple date formats
 function parseRawText(raw: string) {
   // Normalise common separators used in WhatsApp messages (· | / •) into newlines
   // so every field lands on its own line and regexes don't bleed across fields.
@@ -75,7 +77,10 @@ function parseRawText(raw: string) {
     return '';
   };
   const extractNum = (patterns: RegExp[]): number => {
-    const s = extract(patterns).replace(/[^\d]/g, '');
+    const s = extract(patterns)
+      .replace(/[^\d.,]/g, '')
+      .replace(/\./g, '')     // Remove dots for Indonesian format (52.000.000 → 52000000)
+      .replace(/,/g, '.');    // Commas become decimal point
     const n = parseFloat(s);
     return isNaN(n) ? 0 : n;
   };
@@ -87,27 +92,89 @@ function parseRawText(raw: string) {
       jan:'01',feb:'02',mar:'03',apr:'04',jun:'06',jul:'07',aug:'08',
       sep:'09',oct:'10',nov:'11',dec:'12',
     };
-    s = s.trim();
+    s = s.trim().toLowerCase();
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    let m = s.match(/(\d{1,2})[\/\-\s]([a-z]+)[\/\-\s,\s]*(\d{4})/i);
-    if (m) { const mo = MONTHS[m[2].toLowerCase()]; if (mo) return `${m[3]}-${mo}-${m[1].padStart(2,'0')}`; }
-    m = s.match(/([a-z]+)[\/\-\s,\s]*(\d{1,2})[\/\-\s,\s]*(\d{4})/i);
-    if (m) { const mo = MONTHS[m[1].toLowerCase()]; if (mo) return `${m[3]}-${mo}-${m[2].padStart(2,'0')}`; }
+
+    // "1-April" or "1 april" (no year)
+    let m = s.match(/(\d{1,2})[\\/\-\s]([a-z]+)$/i);
+    if (m) {
+      const mo = MONTHS[m[2]];
+      if (mo) return `${new Date().getFullYear()}-${mo}-${m[1].padStart(2,'0')}`;
+    }
+    // "April 1" (no year)
+    m = s.match(/^([a-z]+)[\\/\-\s](\d{1,2})$/i);
+    if (m) {
+      const mo = MONTHS[m[1]];
+      if (mo) return `${new Date().getFullYear()}-${mo}-${m[2].padStart(2,'0')}`;
+    }
+    // "1-April-2025" or "1 April 2025"
+    m = s.match(/(\d{1,2})[\\/\-\s]([a-z]+)[\\/\-\s,\s]*(\d{4})/i);
+    if (m) { const mo = MONTHS[m[2]]; if (mo) return `${m[3]}-${mo}-${m[1].padStart(2,'0')}`; }
+    // "April 1, 2025"
+    m = s.match(/([a-z]+)[\\/\-\s,\s]*(\d{1,2})[\\/\-\s,\s]*(\d{4})/i);
+    if (m) { const mo = MONTHS[m[1]]; if (mo) return `${m[3]}-${mo}-${m[2].padStart(2,'0')}`; }
+    // "01/04/2025" or "01-04-2025"
     m = s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
     if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
     return '';
   };
 
-  // Stop capture at newline or comma (· and | already converted to newlines above)
-  const name        = extract([/(?:guest|name|tenant|tamu)[:\s]+([^\n,\r]+)/i]);
-  const nationality = extract([/(?:nationality|citizen(?:ship)?|warga)[:\s]+([^\n,\r]+)/i]);
-  const passport    = extract([/(?:passport|paspor)(?:\s*(?:no|number|#|num))?[:\s]+([A-Z0-9]+)/i]);
-  const phone       = extract([/(?:phone|tel|hp|wa|whatsapp|mobile)[:\s]+([\+\d\s\-()]+)/i]);
-  const villaName   = extract([/(?:villa|property|rumah)[:\s]+([^\n,\r]+)/i]);
-  const checkInRaw  = extract([/check[-\s]?in[:\s]+([^\n\r]+)/i, /arrival[:\s]+([^\n\r]+)/i, /masuk[:\s]+([^\n\r]+)/i]);
-  const checkOutRaw = extract([/check[-\s]?out[:\s]+([^\n\r]+)/i, /departure[:\s]+([^\n\r]+)/i, /keluar[:\s]+([^\n\r]+)/i]);
-  const monthly     = extractNum([/monthly(?:\s*(?:price|rent|rate))?[:\s]+([\d,.]+)/i, /per\s*month[:\s]+([\d,.]+)/i]);
-  const total       = extractNum([/total(?:\s*(?:price|amount|payment))?[:\s]+([\d,.]+)/i]);
+  // ── Core fields (expanded aliases + flexible separators) ──
+  const name        = extract([
+    /(?:guest|name|tenant|tamu|nama|penyewa|person|lessee)[:\s*=]+([^\n,\r]+)/i,
+  ]);
+  const nationality = extract([
+    /(?:nationality|citizen(?:ship)?|warga|negara|country)[:\s*=]+([^\n,\r]+)/i,
+  ]);
+  const passport    = extract([
+    /(?:passport|paspor)(?:\s*(?:no|number|#|num|id))?[:\s*=]+([A-Z0-9]+)/i,
+  ]);
+  const phone       = extract([
+    /(?:phone|tel|hp|wa|whatsapp|mobile|contact|nomor)[:\s*=]+([\+\d\s\-()]+)/i,
+  ]);
+  const villaName   = extract([
+    /(?:villa|property|rumah|properti|house|premise)[:\s*=]+([^\n,\r]+)/i,
+  ]);
+  const checkInRaw  = extract([
+    /check[-\s]?in(?:\s*date)?[:\s*=]+([^\n\r]+)/i,
+    /arrival[:\s*=]+([^\n\r]+)/i,
+    /masuk[:\s*=]+([^\n\r]+)/i,
+    /start(?:\s*date)?[:\s*=]+([^\n\r]+)/i,
+  ]);
+  const checkOutRaw = extract([
+    /check[-\s]?out(?:\s*date)?[:\s*=]+([^\n\r]+)/i,
+    /departure[:\s*=]+([^\n\r]+)/i,
+    /keluar[:\s*=]+([^\n\r]+)/i,
+    /end(?:\s*date)?[:\s*=]+([^\n\r]+)/i,
+  ]);
+  const monthly     = extractNum([
+    /monthly(?:\s*(?:price|rent|rate))?[:\s*=]+([\d,.]+)/i,
+    /per\s*month[:\s*=]+([\d,.]+)/i,
+    /harga(?:\s*bulanan)?[:\s*=]+([\d,.]+)/i,
+  ]);
+  const total       = extractNum([
+    /total(?:\s*(?:price|amount|payment|rent(?:al)?))?[:\s*=]+([\d,.]+)/i,
+  ]);
+
+  // ── New v2 fields ──
+  const bedrooms    = extractNum([
+    /(?:bedrooms?|br|rooms?|kamar|bed)[:\s*=]*(\d+)/i,
+  ]);
+  const securityDeposit = extractNum([
+    /(?:security\s*deposit|deposit|jaminan)[:\s*=]+([\d,.]+)/i,
+  ]);
+  const paymentCurrency = extract([
+    /(?:payment\s*currency|currency|mata\s*uang)[:\s*=]+([^\n,\r]+)/i,
+  ]) || '';
+  const paymentTerms = extract([
+    /(?:payment\s*terms|terms|condition|syarat)[:\s*=]+([^\n,\r]+)/i,
+  ]);
+  const numberOfGuests = extractNum([
+    /(?:number\s*of\s*(?:people|guests?|person)|guests?|people|pax)[:\s*=]*(\d+)/i,
+  ]);
+  const agent = extract([
+    /(?:agent|commissioner|commission|mediator|agen)[:\s*=]+([^\n,\r]+)/i,
+  ]);
 
   return {
     name, nationality, passport,
@@ -117,6 +184,13 @@ function parseRawText(raw: string) {
     checkOutDate: toISODate(checkOutRaw),
     monthlyPrice: monthly,
     totalPrice:   total,
+    // v2 fields
+    bedrooms,
+    securityDeposit,
+    paymentCurrency,
+    paymentTerms,
+    numberOfGuests,
+    agent,
   };
 }
 
@@ -404,22 +478,28 @@ const App: React.FC = () => {
     setLocalTemplateFile(null);
   };
 
-  // ─── Smart Auto-Fill ──────────────────────────────────────────────────────
+  // ─── Smart Auto-Fill v2 ──────────────────────────────────────────────────
   const handleAutoFill = () => {
     if (!autoFillText.trim()) return;
     const parsed = parseRawText(autoFillText);
 
     // Count filled fields BEFORE setData (avoids async closure issue)
     let filled = 0;
-    if (parsed.villaName)    filled++;
-    if (parsed.checkInDate)  filled++;
-    if (parsed.checkOutDate) filled++;
-    if (parsed.monthlyPrice) filled++;
-    if (parsed.totalPrice)   filled++;
-    if (parsed.name)         filled++;
-    if (parsed.passport)     filled++;
-    if (parsed.nationality)  filled++;
-    if (parsed.phone)        filled++;
+    if (parsed.villaName)        filled++;
+    if (parsed.checkInDate)      filled++;
+    if (parsed.checkOutDate)     filled++;
+    if (parsed.monthlyPrice)     filled++;
+    if (parsed.totalPrice)       filled++;
+    if (parsed.name)             filled++;
+    if (parsed.passport)         filled++;
+    if (parsed.nationality)      filled++;
+    if (parsed.phone)            filled++;
+    if (parsed.bedrooms)         filled++;
+    if (parsed.securityDeposit)  filled++;
+    if (parsed.paymentCurrency)  filled++;
+    if (parsed.paymentTerms)     filled++;
+    if (parsed.numberOfGuests)   filled++;
+    if (parsed.agent)            filled++;
 
     if (filled === 0) {
       setAutoFillMsg('⚠ No matching fields found — try adding labels like "Guest:", "Check-in:", "Villa:", etc.');
@@ -434,6 +514,14 @@ const App: React.FC = () => {
       if (parsed.checkOutDate) { next.checkOutDate = parsed.checkOutDate; setIsPriceManuallySet(false); }
       if (parsed.monthlyPrice) { next.monthlyPrice = parsed.monthlyPrice; setIsPriceManuallySet(false); }
       if (parsed.totalPrice)   { next.totalPrice   = parsed.totalPrice;   setIsPriceManuallySet(true); }
+      // v2: new fields
+      if (parsed.bedrooms)         next.bedrooms = parsed.bedrooms;
+      if (parsed.securityDeposit)  next.securityDepositOverride = parsed.securityDeposit;
+      if (parsed.paymentCurrency)  next.paymentCurrency = parsed.paymentCurrency;
+      if (parsed.agent) {
+        next.agent = { ...next.agent, enabled: true, company: parsed.agent };
+      }
+      // Guest info
       if (parsed.name || parsed.passport || parsed.nationality || parsed.phone) {
         const guest = { ...next.guests[0] };
         if (parsed.name)        guest.name           = parsed.name;
@@ -445,7 +533,7 @@ const App: React.FC = () => {
       return next;
     });
 
-    setAutoFillMsg(`✓ Auto-filled ${filled} field${filled > 1 ? 's' : ''}`);
+    setAutoFillMsg(`✓ Auto-filled ${filled} field${filled > 1 ? 's' : ''} from any format!`);
     setAutoFillOpen(false);
     setTimeout(() => setAutoFillMsg(''), 4000);
   };
@@ -593,7 +681,7 @@ const App: React.FC = () => {
                 <FilePlus className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">New Contract</span>
               </button>
-              <span className="text-xs text-emerald-400 font-mono bg-emerald-800/50 px-2 py-1 rounded-lg">v3.1.0</span>
+              <span className="text-xs text-emerald-400 font-mono bg-emerald-800/50 px-2 py-1 rounded-lg">v3.2.0</span>
             </div>
           </div>
         </header>
