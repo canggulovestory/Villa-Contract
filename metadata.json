@@ -1,0 +1,7 @@
+{
+  "name": "Villa Contract Generator 2",
+  "description": "A professional tool for property managers to generate villa rental contracts with automatic calculations, passport OCR, and Word document generation.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
