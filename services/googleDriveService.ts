@@ -35,6 +35,11 @@ export const initGoogleAuth = (): Promise<void> => {
           scope: SCOPES,
           callback: () => {},
         });
+        // Restore token from sessionStorage if available (from previous session)
+        const savedToken = sessionStorage.getItem('google_access_token');
+        if (savedToken) {
+          accessToken = savedToken;
+        }
         resolve();
       } else {
         setTimeout(check, 200);
@@ -56,6 +61,8 @@ export const signInToGoogle = (): Promise<string> => {
         return;
       }
       accessToken = response.access_token;
+      // Persist token to sessionStorage so it survives page refresh
+      sessionStorage.setItem('google_access_token', response.access_token);
       resolve(response.access_token);
     };
     tokenClient.requestAccessToken({ prompt: 'consent' });
@@ -67,6 +74,8 @@ export const signOutFromGoogle = (): void => {
     (google as any).accounts.oauth2.revoke(accessToken, () => {});
   }
   accessToken = null;
+  // Clear persisted token on logout
+  sessionStorage.removeItem('google_access_token');
 };
 
 export const isSignedIn     = (): boolean       => accessToken !== null;
