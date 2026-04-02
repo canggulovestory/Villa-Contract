@@ -349,8 +349,10 @@ const App: React.FC = () => {
   // ─── Smart Auto-Fill v2 ──────────────────────────────────────────────────
   const handleAutoFill = async () => {
     if (!autoFillText.trim()) return;
-    
-    setAutoFillMsg('⏳ Parsing with Gemini AI...');
+
+    const geminiKey = process.env.GEMINI_API_KEY || (import.meta as any).env?.VITE_GOOGLE_API_KEY || '';
+    const isAIAvailable = geminiKey.length > 0;
+    setAutoFillMsg(isAIAvailable ? '⏳ Parsing with AI...' : '⏳ Parsing...');
     const parsed = await parseInquiryText(autoFillText);
 
     // Count filled fields BEFORE setData (avoids async closure issue)
@@ -546,7 +548,7 @@ const App: React.FC = () => {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-4">
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 flex items-center gap-2 text-sm text-emerald-700">
               <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-              <span><strong>Both templates auto-loaded</strong> — Guest Contract &amp; 3rd Party Contract ready from Google Drive</span>
+              <span><strong>Guest contract auto-loaded</strong> — ready from Google Drive</span>
             </div>
           </div>
         )}
@@ -744,7 +746,7 @@ const App: React.FC = () => {
                             <CloudUpload className="w-4 h-4" /> Connect Google Drive
                           </button>
                           <p className="text-xs text-emerald-300 text-center">
-                            Both templates auto-load from Drive on connect
+                            Guest contract auto-loads from Drive on connect
                           </p>
                           <div className="border-t border-emerald-600/50 pt-3">
                             <p className="text-xs text-emerald-400 mb-2 font-semibold">Or upload manually:</p>

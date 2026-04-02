@@ -85,9 +85,9 @@ export const PassportUploader: React.FC<PassportUploaderProps> = ({ id, onScanCo
         ) : (
           <>
             <Upload className="w-10 h-10 text-emerald-600" />
-            <div className="text-emerald-900 font-medium">Click to Upload Passport (OCR)</div>
+            <div className="text-emerald-900 font-medium">Click to Upload Passport</div>
             <p className="text-sm text-emerald-600">
-              Supports JPG / PNG / HEIC · Max 5 MB · Auto-fills Name &amp; Number
+              Supports JPG / PNG / HEIC · Max 5 MB · Manual entry required
             </p>
           </>
         )}
