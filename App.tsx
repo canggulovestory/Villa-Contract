@@ -35,6 +35,7 @@ import { Section7Agent }       from './sections/Section7Agent';
 // ─── LocalStorage Keys ────────────────────────────────────────────────────────
 const LS_OWNERS = 'tvm_saved_owners';
 const LS_AGENTS = 'tvm_saved_agents';
+const LS_FORM_DATA = 'tvm_form_data';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MAX_GUESTS = 4;
@@ -99,8 +100,21 @@ const App: React.FC = () => {
       if (o) setSavedOwners(JSON.parse(o));
       const a = localStorage.getItem(LS_AGENTS);
       if (a) setSavedAgents(JSON.parse(a));
+      // Load saved form data (auto-restored on refresh)
+      const f = localStorage.getItem(LS_FORM_DATA);
+      if (f) {
+        const savedData = JSON.parse(f);
+        setData(savedData);
+      }
     } catch { /* ignore */ }
   }, []);
+
+  // ─── Auto-save form data to localStorage ─────────────────────────────────
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_FORM_DATA, JSON.stringify(data));
+    } catch { /* ignore if quota exceeded */ }
+  }, [data]);
 
   // ─── Auto-load BOTH templates + villa list from Drive/Sheets on connect ──
   useEffect(() => {
