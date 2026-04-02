@@ -288,6 +288,8 @@ export const saveDealToDrive = async (
 };
 
 // ─── Simple single-file save (legacy / quick save) ────────────────────────────
+// LEGACY: Use saveDealToDrive() instead (creates folder structure, uploads multiple files)
+// This function is kept for backward compatibility but not actively used.
 export const saveContractToDrive = async (
   buffer:   ArrayBuffer,
   filename: string
@@ -299,8 +301,9 @@ export const saveContractToDrive = async (
   const boundary  = 'villa_contract_boundary';
   const body      = buildMultipart({ name: filename, mimeType: DOCX_MIME }, new Uint8Array(buffer), DOCX_MIME, boundary);
 
+  // Use OAuth token only (no API key needed for authenticated uploads)
   const res = await fetch(
-    `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&key=${API_KEY}`,
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
     {
       method: 'POST',
       headers: {
