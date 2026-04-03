@@ -11,7 +11,7 @@ const genAI = new GoogleGenerativeAI(apiKey);
 export const parseInquiryText = async (rawText: string): Promise<any> => {
   // Try to use the faster, cheaper 1.5 Flash model
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-flash',
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema: {
@@ -143,7 +143,7 @@ const fileToGenerativePart = async (file: File) => {
  */
 export const extractPassportData = async (file: File): Promise<{ extractedName: string; extractedPassport: string }> => {
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-flash',
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema: {
