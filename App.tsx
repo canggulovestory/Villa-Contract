@@ -15,6 +15,9 @@ import {
   saveContractToDrive, saveDealToDrive, PassportFile,
 } from './services/googleDriveService';
 import { parseInquiryText } from './services/aiService';
+import {
+  appendContractRow, saveAgentToSheet, saveOwnerToSheet, isSheetsWriteAvailable,
+} from './services/googleSheetsService';
 import { TemplateGuide } from './components/TemplateGuide';
 import { PassportUploader } from './components/PassportUploader';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -89,6 +92,7 @@ const App: React.FC = () => {
   const [guestPassportFiles, setGuestPassportFiles] = useState<(File | null)[]>([null]);
   const [dealFolderLink, setDealFolderLink]         = useState<string>('');
   const [agentIdFile, setAgentIdFile]               = useState<File | null>(null);
+  const [sheetStatus, setSheetStatus]               = useState<string>('');
 
   // ─── Init Google Auth (GIS tokenClient) on mount ─────────────────────────
   useEffect(() => { initGoogleAuth(); }, []);
@@ -444,6 +448,21 @@ const App: React.FC = () => {
     if (errs.length > 0) { setFormErrors(errs); window.scrollTo({ top: 0, behavior: 'smooth' }); }
     return errs;
   };
+  // ── Helper: log contract to sheet (non-blocking, best-effort) ──
+  const logContractToSheet = async (driveLink: string = '') => {
+    if (!isSheetsWriteAvailable()) return;
+    setSheetStatus('Logging to sheet…');
+    try {
+      await appendContractRow(data, computedData, driveLink);
+      if (data.agent.enabled) await saveAgentToSheet(data.agent);
+      if (data.lessor.enabled) await saveOwnerToSheet(data.lessor);
+      setSheetStatus('Logged to sheet ✓');
+    } catch (sheetErr) {
+      console.error('Sheet logging failed:', sheetErr);
+      setSheetStatus('Sheet logging failed');
+    }
+  };
+
   const handleDownload3rdParty = async () => {
     setFormErrors([]); setGenerateError(''); setSavedDriveLink('');
     if (!driveConnected && !autoTemplate) { setGenerateError('Connect Google Drive to use the 3rd Party Contract template.'); return; }
@@ -454,6 +473,7 @@ const App: React.FC = () => {
       const { buffer, filename } = await generateDocument(buf, data, computedData);
       downloadContractLocally(buffer, filename);
       setDriveStatus('');
+      await logContractToSheet();
     } catch (e: unknown) { setGenerateError(e instanceof Error ? e.message : 'Error generating contract.'); }
     finally { setIsGenerating(false); }
   };
@@ -463,7 +483,11 @@ const App: React.FC = () => {
     const src = await resolveTemplate();
     if (!src) return;
     setIsGenerating(true);
-    try { const { buffer, filename } = await generateDocument(src, data, computedData); downloadContractLocally(buffer, filename); }
+    try {
+      const { buffer, filename } = await generateDocument(src, data, computedData);
+      downloadContractLocally(buffer, filename);
+      await logContractToSheet();
+    }
     catch (e: unknown) { setGenerateError(e instanceof Error ? e.message : 'Error generating contract.'); }
     finally { setIsGenerating(false); }
   };
@@ -498,6 +522,7 @@ const App: React.FC = () => {
       setSavedDriveLink(result.contractFileLink);
       setDealFolderLink(result.folderLink);
       setDriveStatus('Saved to Drive ✓');
+      await logContractToSheet(result.folderLink);
     } catch (e: unknown) { setGenerateError(e instanceof Error ? e.message : 'Error saving to Drive.'); setDriveStatus(''); }
     finally { setIsGenerating(false); }
   };
@@ -784,6 +809,19 @@ const App: React.FC = () => {
                           {driveStatus}
                         </p>
                       )}
+                      {sheetStatus && (
+                        <p className={`text-xs flex items-center gap-1.5 ${
+                          sheetStatus.includes('✓') ? 'text-emerald-300' :
+                          sheetStatus.includes('failed') ? 'text-yellow-300' :
+                          'text-emerald-200 animate-pulse'
+                        }`}>
+                          <span className="w-1.5 h-1.5 rounded-full inline-block" style={{
+                            backgroundColor: sheetStatus.includes('✓') ? '#6ee7b7' :
+                              sheetStatus.includes('failed') ? '#fcd34d' : '#34d399'
+                          }} />
+                          {sheetStatus}
+                        </p>
+                      )}
                     </div>
 
                     {/* Copy Type Selector */}
@@ -833,6 +871,13 @@ const App: React.FC = () => {
                           className="w-full py-3 bg-blue-500 hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition active:scale-95">
                           <CloudUpload className="w-4 h-4" />
                           {isGenerating ? 'Saving…' : 'Save Copy to Drive'}
+                        </button>
+                      )}
+                      {driveConnected && isSheetsWriteAvailable() && (
+                        <button onClick={() => logContractToSheet(dealFolderLink)} disabled={isGenerating || sheetStatus === 'Logging to sheet…'}
+                          className="w-full py-2 bg-emerald-600/40 hover:bg-emerald-600/60 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-200 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 transition active:scale-95">
+                          <FilePlus className="w-3.5 h-3.5" />
+                          {sheetStatus === 'Logging to sheet…' ? 'Logging…' : 'Log to Sheet'}
                         </button>
                       )}
                     </div>

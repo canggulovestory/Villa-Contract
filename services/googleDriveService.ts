@@ -13,7 +13,7 @@ const DIRECT_TEMPLATE_FILE_ID = import.meta.env.VITE_DIRECT_TEMPLATE_FILE_ID || 
 const SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/drive.readonly',
-  'https://www.googleapis.com/auth/spreadsheets.readonly',
+  'https://www.googleapis.com/auth/spreadsheets',        // read + write (upgraded from readonly)
 ].join(' ');
 const ROOT_FOLDER_NAME = 'Villa Contracts - TVM';
 
