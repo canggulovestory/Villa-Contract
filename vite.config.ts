@@ -3,7 +3,9 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
+    // loadEnv reads .env files (local dev); process.env has Vercel/system vars (production builds)
     const env = loadEnv(mode, '.', '');
+    const geminiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
     return {
       server: {
         port: 3000,
@@ -11,8 +13,8 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'process.env.API_KEY': JSON.stringify(geminiKey),
+        'process.env.GEMINI_API_KEY': JSON.stringify(geminiKey),
       },
       resolve: {
         alias: {
