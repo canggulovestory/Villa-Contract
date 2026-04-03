@@ -11,7 +11,7 @@ const genAI = new GoogleGenerativeAI(apiKey);
 export const parseInquiryText = async (rawText: string): Promise<any> => {
   // Try to use the faster, cheaper 1.5 Flash model
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.0-flash',
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema: {
@@ -121,10 +121,19 @@ const fileToGenerativePart = async (file: File) => {
     reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
     reader.readAsDataURL(file);
   });
+  // Fix: ensure mimeType is never empty (HEIC files often have empty file.type)
+  let mimeType = file.type;
+  if (!mimeType || mimeType === 'application/octet-stream') {
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (ext === 'heic' || ext === 'heif') mimeType = 'image/heic';
+    else if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg';
+    else if (ext === 'png') mimeType = 'image/png';
+    else mimeType = 'image/jpeg'; // safe fallback
+  }
   return {
     inlineData: {
       data: await base64EncodedDataPromise,
-      mimeType: file.type
+      mimeType,
     }
   };
 };
@@ -134,7 +143,7 @@ const fileToGenerativePart = async (file: File) => {
  */
 export const extractPassportData = async (file: File): Promise<{ extractedName: string; extractedPassport: string }> => {
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.0-flash',
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema: {

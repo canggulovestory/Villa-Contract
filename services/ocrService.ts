@@ -30,7 +30,8 @@ export const scanPassport = async (file: File): Promise<OCRResult> => {
       extractedPassport,
     };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'OCR engine failed';
-    throw new Error(`Could not scan image: ${message}. Please enter details manually.`);
+    // Pass through the original error — don't double-wrap
+    if (err instanceof Error) throw err;
+    throw new Error('Image scan failed. Please enter details manually.');
   }
 };

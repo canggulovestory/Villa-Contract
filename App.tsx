@@ -408,7 +408,8 @@ const App: React.FC = () => {
       return next;
     });
 
-    setAutoFillMsg(`✓ Auto-filled ${filled} field${filled > 1 ? 's' : ''} using AI!`);
+    const geminiAvail = (process.env.GEMINI_API_KEY || (import.meta as any).env?.VITE_GOOGLE_API_KEY || '').length > 0;
+    setAutoFillMsg(`✓ Auto-filled ${filled} field${filled > 1 ? 's' : ''}${geminiAvail ? ' with AI' : ''}`);
     setAutoFillOpen(false);
     setTimeout(() => setAutoFillMsg(''), 4000);
   };
@@ -650,8 +651,14 @@ const App: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
                   <button onClick={handleAutoFill}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition active:scale-95">
-                    <span>⚡</span> Parse &amp; Auto-Fill Form
+                    disabled={autoFillMsg.startsWith('⏳')}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 disabled:cursor-not-allowed text-white font-bold text-sm rounded-xl transition active:scale-95">
+                    {autoFillMsg.startsWith('⏳') ? (
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
+                    ) : (
+                      <span>⚡</span>
+                    )}
+                    {autoFillMsg.startsWith('⏳') ? 'Parsing…' : 'Parse & Auto-Fill Form'}
                   </button>
                   {autoFillMsg && (
                     <span className={`text-sm font-semibold ${autoFillMsg.startsWith('✓') ? 'text-emerald-600' : 'text-amber-500'}`}>
