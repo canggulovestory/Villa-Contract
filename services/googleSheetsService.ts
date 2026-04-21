@@ -201,8 +201,10 @@ export const saveAgentToSheet = async (agent: AgentData): Promise<void> => {
     .map(([k]) => k)
     .join(', ');
 
+  // Use same dedup key logic for the Company column so lookups always match
+  const agentKey = (agent.company || agent.fullName || agent.picName).trim();
   const row: (string | number)[] = [
-    agent.company,                   // Company
+    agentKey,                        // Company (dedup key — company or name)
     agent.partnershipType,           // Partnership Type
     agent.fullName,                  // PIC Name
     agent.phone,                     // Phone
@@ -214,8 +216,15 @@ export const saveAgentToSheet = async (agent: AgentData): Promise<void> => {
     today(),                         // Date Added
   ];
 
-  // Try to find existing row by company name (column A = index 0)
-  const existingRow = await findRowByValue(AGENTS_TAB, 0, agent.company);
+  // Dedup key: prefer company name, fall back to full name, then pic name
+  const dedupKey = (agent.company || agent.fullName || agent.picName).trim();
+  if (!dedupKey) {
+    // No identifier to dedup on — just append so we don't accidentally match empty rows
+    await appendRow(AGENTS_TAB, row);
+    return;
+  }
+
+  const existingRow = await findRowByValue(AGENTS_TAB, 0, dedupKey);
   if (existingRow > 0) {
     await updateRow(AGENTS_TAB, existingRow, row);
   } else {

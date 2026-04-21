@@ -933,7 +933,7 @@ const App: React.FC = () => {
         </main>
 
         <footer className="text-center py-6 text-xs text-slate-400">
-          Villa Contract Generator v3.1.0 · Clarity Homes Bali 🌴
+          Villa Contract Generator v3.2.0 · Clarity Homes Bali 🌴
         </footer>
 
       </div>

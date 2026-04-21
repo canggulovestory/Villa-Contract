@@ -33,17 +33,27 @@ export const formatIDR = (value: number): string => {
 };
 
 // Fixed: always produces a consistent Indonesian date format regardless of
-// the user's browser locale (was using toLocaleDateString() before, which
-// could produce different formats on different machines).
+// the user's browser locale. Uses explicit year/month/day constructor so
+// the date is treated as LOCAL time — not UTC midnight (which would show
+// the previous day in UTC-offset timezones like America/New_York).
 export const formatDate = (dateStr: string): string => {
   if (!dateStr) return '';
   try {
+    const parts = dateStr.split('-').map(Number);
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      // new Date(year, month-1, day) → local midnight, no UTC offset issue
+      const d = new Date(parts[0], parts[1] - 1, parts[2]);
+      return new Intl.DateTimeFormat('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }).format(d);
+    }
+    // Fallback for non-YYYY-MM-DD strings
     return new Intl.DateTimeFormat('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
+      day: 'numeric', month: 'long', year: 'numeric',
     }).format(new Date(dateStr));
   } catch {
-    return dateStr; // fallback to raw string if date is malformed
+    return dateStr;
   }
 };
