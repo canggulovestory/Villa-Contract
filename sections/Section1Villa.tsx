@@ -22,7 +22,7 @@ export const Section1Villa: React.FC<Props> = ({ data, handleInputChange, onVill
         <div className="relative">
           <select
             onChange={onVillaTemplateChange}
-            defaultValue=""
+            value=""
             className="appearance-none pl-3 pr-8 py-2 text-sm border border-emerald-200 bg-emerald-50 text-emerald-800 font-semibold rounded-xl focus:ring-2 focus:ring-emerald-400 outline-none cursor-pointer transition"
           >
             <option value="" disabled>

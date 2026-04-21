@@ -95,7 +95,14 @@ const App: React.FC = () => {
   const [sheetStatus, setSheetStatus]               = useState<string>('');
 
   // ─── Init Google Auth (GIS tokenClient) on mount ─────────────────────────
-  useEffect(() => { initGoogleAuth(); }, []);
+  // After init, check if a token was restored from sessionStorage and update UI state
+  useEffect(() => {
+    initGoogleAuth().then(() => {
+      if (isSignedIn()) {
+        setDriveConnected(true); // restores connected state after page refresh
+      }
+    });
+  }, []);
 
   // ─── Load saved contacts from localStorage ───────────────────────────────
   useEffect(() => {
@@ -133,7 +140,13 @@ const App: React.FC = () => {
       setAutoDirectTemplate(bufDirect);
       setTemplateBanner('loaded');
       setSheetVillas(villas);
-    }).catch(() => setTemplateBanner('failed'));
+    }).catch((err: unknown) => {
+      setTemplateBanner('failed');
+      // If token expired while auto-loading, reset connected state so user sees reconnect button
+      if (err instanceof Error && err.message.includes('session expired')) {
+        setDriveConnected(false);
+      }
+    });
   }, [driveConnected]);
 
   // ─── computedData ────────────────────────────────────────────────────────
@@ -158,7 +171,7 @@ const App: React.FC = () => {
     if (data.otherInclusions.trim()) active.push(data.otherInclusions.trim());
     const inclusionsList = active.length > 0 ? active.join(', ') : 'None';
     return { numberOfNights, numberOfMonths, securityDeposit, inclusionsList };
-  }, [data.checkInDate, data.checkOutDate, data.totalPrice, data.inclusions, data.otherInclusions]);
+  }, [data.checkInDate, data.checkOutDate, data.totalPrice, data.securityDepositOverride, data.inclusions, data.otherInclusions]);
 
   // ─── Total price auto-calc ────────────────────────────────────────────────
   useEffect(() => {
@@ -382,13 +395,17 @@ const App: React.FC = () => {
       return;
     }
 
+    // Determine priceManuallySet BEFORE calling setData (can't call setState inside updater)
+    const shouldManualPrice = Boolean(parsed.totalPrice && !parsed.monthlyPrice);
+    setIsPriceManuallySet(shouldManualPrice);
+
     setData(prev => {
       const next = { ...prev };
       if (parsed.villaName)    next.villaName     = parsed.villaName;
-      if (parsed.checkInDate)  { next.checkInDate  = parsed.checkInDate;  setIsPriceManuallySet(false); }
-      if (parsed.checkOutDate) { next.checkOutDate = parsed.checkOutDate; setIsPriceManuallySet(false); }
-      if (parsed.monthlyPrice) { next.monthlyPrice = parsed.monthlyPrice; setIsPriceManuallySet(false); }
-      if (parsed.totalPrice)   { next.totalPrice   = parsed.totalPrice;   setIsPriceManuallySet(true); }
+      if (parsed.checkInDate)  next.checkInDate   = parsed.checkInDate;
+      if (parsed.checkOutDate) next.checkOutDate  = parsed.checkOutDate;
+      if (parsed.monthlyPrice) next.monthlyPrice  = parsed.monthlyPrice;
+      if (parsed.totalPrice)   next.totalPrice    = parsed.totalPrice;
       // v2: new fields
       if (parsed.bedrooms)         next.bedrooms = parsed.bedrooms;
       if (parsed.securityDeposit)  next.securityDepositOverride = parsed.securityDeposit;

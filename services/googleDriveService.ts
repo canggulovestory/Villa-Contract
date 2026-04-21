@@ -65,7 +65,8 @@ export const signInToGoogle = (): Promise<string> => {
       sessionStorage.setItem('google_access_token', response.access_token);
       resolve(response.access_token);
     };
-    tokenClient.requestAccessToken({ prompt: 'consent' });
+    // Use prompt: '' so returning users skip the consent screen (only shown on first auth)
+    tokenClient.requestAccessToken({ prompt: '' });
   });
 };
 
@@ -98,6 +99,12 @@ const fetchFileFromDrive = async (fileId: string): Promise<ArrayBuffer> => {
   });
 
   if (!res.ok) {
+    // 401 = token expired — clear so UI shows reconnect prompt
+    if (res.status === 401) {
+      accessToken = null;
+      sessionStorage.removeItem('google_access_token');
+      throw new Error('Google session expired. Please reconnect Drive.');
+    }
     const errText = await res.text();
     throw new Error('Failed to fetch template from Drive (' + res.status + '): ' + errText);
   }
@@ -166,7 +173,14 @@ const uploadFile = async (
     }
   );
 
-  if (!res.ok) throw new Error(`Upload failed (${res.status}): ${await res.text()}`);
+  if (!res.ok) {
+    if (res.status === 401) {
+      accessToken = null;
+      sessionStorage.removeItem('google_access_token');
+      throw new Error('Google session expired. Please reconnect Drive.');
+    }
+    throw new Error(`Upload failed (${res.status}): ${await res.text()}`);
+  }
   const json = await res.json();
   return json.id as string;
 };
