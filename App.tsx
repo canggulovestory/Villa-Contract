@@ -526,10 +526,10 @@ const App: React.FC = () => {
   const handleDownload = async () => {
     setFormErrors([]); setGenerateError(''); setSavedDriveLink('');
     if (runValidation().length > 0) return;
-    const src = await resolveTemplate();
-    if (!src) return;
-    setIsGenerating(true);
+    setIsGenerating(true);   // show spinner before Drive template fetch
     try {
+      const src = await resolveTemplate();
+      if (!src) return;
       const { buffer, filename } = await generateDocument(src, data, computedData);
       downloadContractLocally(buffer, filename);
       await logContractToSheet();

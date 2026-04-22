@@ -37,6 +37,11 @@ export const generateDocument = async (
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
     linebreaks: true,
+    // Match the {{tag}} syntax shown in TemplateGuide and used in all official templates
+    delimiters: { start: '{{', end: '}}' },
+    // Return empty string for any tag present in the template but absent from templateData
+    // (e.g. {{guest2Name}} when only 1 guest) — prevents a fatal render crash
+    nullGetter: () => '',
   });
 
   // ── 1. Flatten guest data into numbered tags (guest1Name, guest2Name, …)
@@ -253,6 +258,16 @@ export const generateDocument = async (
   try {
     doc.render(templateData);
   } catch (err: unknown) {
+    // Docxtemplater v3 throws a structured error object with a `properties.errors` array.
+    // Surface the human-readable messages from each sub-error, falling back to err.message.
+    if (err && typeof err === 'object' && 'properties' in err) {
+      const dtErr = err as { properties?: { errors?: Array<{ message?: string }> } };
+      const subMessages = dtErr.properties?.errors
+        ?.map(e => e.message)
+        .filter(Boolean)
+        .join('; ');
+      if (subMessages) throw new Error(`Template rendering failed: ${subMessages}`);
+    }
     const message = err instanceof Error ? err.message : 'Unknown template error';
     throw new Error(`Template rendering failed: ${message}`);
   }
