@@ -631,7 +631,7 @@ const App: React.FC = () => {
                 <FilePlus className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">New Contract</span>
               </button>
-              <span className="text-xs text-emerald-400 font-mono bg-emerald-800/50 px-2 py-1 rounded-lg">v3.2.0</span>
+              <span className="text-xs text-emerald-400 font-mono bg-emerald-800/50 px-2 py-1 rounded-lg">v3.4.0</span>
             </div>
           </div>
         </header>
