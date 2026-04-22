@@ -119,7 +119,7 @@ export const Section3Stay: React.FC<Props> = ({
             />
             {data.checkOutDate && (
               <span className="text-xs text-emerald-600">
-                → {new Date(data.checkOutDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                → {new Date(data.checkOutDate + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
               </span>
             )}
           </div>

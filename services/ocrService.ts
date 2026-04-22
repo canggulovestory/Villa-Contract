@@ -25,7 +25,7 @@ export const scanPassport = async (file: File): Promise<OCRResult> => {
   try {
     const { extractedName, extractedPassport } = await extractPassportData(file);
     return {
-      text: "Parsed with Gemini 1.5 Flash Vision.", // stub since UI might not need raw text anymore
+      text: "Parsed with Gemini 2.5 Flash Vision.", // stub since UI might not need raw text anymore
       extractedName,
       extractedPassport,
     };

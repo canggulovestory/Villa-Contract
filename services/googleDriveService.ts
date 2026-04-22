@@ -28,6 +28,8 @@ let tokenClient: any = null;
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 export const initGoogleAuth = (): Promise<void> => {
   return new Promise((resolve) => {
+    let attempts = 0;
+    const MAX_ATTEMPTS = 25; // 25 × 200ms = 5 s max wait for GIS script
     const check = () => {
       if (typeof google !== 'undefined' && (google as any).accounts?.oauth2) {
         tokenClient = (google as any).accounts.oauth2.initTokenClient({
@@ -41,7 +43,12 @@ export const initGoogleAuth = (): Promise<void> => {
           accessToken = savedToken;
         }
         resolve();
+      } else if (attempts >= MAX_ATTEMPTS) {
+        // GIS script failed to load — resolve without token so app still starts
+        console.warn('Google Identity Services script did not load within 5 s. Drive features will be unavailable.');
+        resolve();
       } else {
+        attempts++;
         setTimeout(check, 200);
       }
     };
@@ -192,9 +199,11 @@ const uploadFile = async (
 const findFolder = async (name: string, parentId?: string): Promise<string | null> => {
   if (!accessToken) throw new Error('Not signed in to Google');
 
+  // Escape single quotes so villa names like "Villa D'Amour" don't break the query
+  const escapedName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   const q = parentId
-    ? `name='${name}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`
-    : `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+    ? `name='${escapedName}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`
+    : `name='${escapedName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
 
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=1`,
@@ -310,42 +319,6 @@ export const saveDealToDrive = async (
   };
 };
 
-// ─── Simple single-file save (legacy / quick save) ────────────────────────────
-// LEGACY: Use saveDealToDrive() instead (creates folder structure, uploads multiple files)
-// This function is kept for backward compatibility but not actively used.
-export const saveContractToDrive = async (
-  buffer:   ArrayBuffer,
-  filename: string
-): Promise<string> => {
-  if (!accessToken) throw new Error('Not signed in to Google');
-
-  // Upload to root of Drive (no folder) — kept for backward compat
-  const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  const boundary  = 'villa_contract_boundary';
-  const body      = buildMultipart({ name: filename, mimeType: DOCX_MIME }, new Uint8Array(buffer), DOCX_MIME, boundary);
-
-  // Use OAuth token only (no API key needed for authenticated uploads)
-  const res = await fetch(
-    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': `multipart/related; boundary=${boundary}`,
-      },
-      body: body.buffer,
-    }
-  );
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error('Failed to upload to Drive (' + res.status + '): ' + errText);
-  }
-
-  const json = await res.json();
-  return 'https://drive.google.com/file/d/' + json.id + '/view';
-};
-
 export const getTemplateFileId = (): string => TEMPLATE_FILE_ID;
 
 // ─── Villa List from Sheets ───────────────────────────────────────────────────
@@ -380,8 +353,8 @@ export const fetchVillaListFromSheets = async (): Promise<VillaRow[]> => {
   if (!sheetProps) throw new Error(`Sheet with GID ${VILLA_SHEET_GID} not found`);
   const sheetTitle: string = sheetProps.title;
 
-  // Step 2: fetch values
-  const range = encodeURIComponent(`${sheetTitle}!A1:Z500`);
+  // Step 2: fetch values (up to 2000 rows — well above any realistic villa list)
+  const range = encodeURIComponent(`${sheetTitle}!A1:Z2000`);
   const valRes = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${VILLA_SHEET_ID}/values/${range}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }

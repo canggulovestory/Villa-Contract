@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Upload, ScanLine, AlertCircle, CheckCircle2, ImageIcon, X } from 'lucide-react';
 import { scanPassport } from '../services/ocrService';
 
@@ -34,6 +34,13 @@ export const PassportUploader: React.FC<PassportUploaderProps> = ({ id, onScanCo
   const [fileName, setFileName]       = useState<string>('');
   const [isDragOver, setIsDragOver]   = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Revoke the previous blob URL whenever preview changes or component unmounts (prevents memory leak)
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
 
   const processFile = useCallback(async (file: File) => {
     // Validate size
@@ -123,6 +130,7 @@ export const PassportUploader: React.FC<PassportUploaderProps> = ({ id, onScanCo
   }, [processFile]);
 
   const clearFile = () => {
+    if (preview) URL.revokeObjectURL(preview);
     setPreview(null);
     setFileName('');
     setError(null);

@@ -5,10 +5,31 @@ import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 const apiKey = process.env.GEMINI_API_KEY || (import.meta as any).env?.VITE_GOOGLE_API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface ParsedInquiry {
+  villaName?: string;
+  checkInDate?: string;
+  checkOutDate?: string;
+  monthlyPrice?: number;
+  totalPrice?: number;
+  bedrooms?: number;
+  securityDeposit?: number;
+  paymentCurrency?: string;
+  paymentTerms?: string;
+  agent?: string;
+  name?: string;
+  nationality?: string;
+  passport?: string;
+  phone?: string;
+  numberOfGuests?: number;
+}
+
 /**
  * Parses raw text from an inquiry (e.g. WhatsApp message) into structured ContractData overrides.
+ * Returns `{ data, usedAI }` — usedAI is true when Gemini parsed successfully, false when regex fallback was used.
  */
-export const parseInquiryText = async (rawText: string): Promise<any> => {
+export const parseInquiryText = async (rawText: string): Promise<{ data: ParsedInquiry; usedAI: boolean }> => {
   // Try to use the faster, cheaper 1.5 Flash model
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.5-flash',
@@ -53,15 +74,15 @@ ${rawText}
   try {
     const result = await model.generateContent(prompt);
     const response = result.response;
-    return JSON.parse(response.text());
+    return { data: JSON.parse(response.text()) as ParsedInquiry, usedAI: true };
   } catch (error) {
     console.error('Failed to parse inquiry with Gemini — falling back to regex parser:', error);
-    return parseRawTextFallback(rawText);
+    return { data: parseRawTextFallback(rawText), usedAI: false };
   }
 };
 
 /** Regex-based fallback parser used when Gemini AI is unavailable or API key is not set. */
-function parseRawTextFallback(raw: string): Record<string, any> {
+function parseRawTextFallback(raw: string): ParsedInquiry {
   // Normalise: "Label:\nValue" → "Label: Value"
   const txt = raw.replace(/:\s*\r?\n\s*([^\n:]+)/g, ': $1').replace(/\r\n/g, '\n');
 

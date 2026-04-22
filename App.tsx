@@ -12,7 +12,7 @@ import {
   initGoogleAuth, isSignedIn, signInToGoogle, signOutFromGoogle,
   fetchTemplateFromDrive, fetchDirectTemplateFromDrive,
   fetchVillaListFromSheets, VillaRow,
-  saveContractToDrive, saveDealToDrive, PassportFile,
+  saveDealToDrive, PassportFile,
 } from './services/googleDriveService';
 import { parseInquiryText } from './services/aiService';
 import {
@@ -52,7 +52,10 @@ function validateForm(data: ContractData, computed: ComputedData): string[] {
   if (data.bedrooms < 1)         errors.push('Bedrooms must be at least 1.');
   if (!data.checkInDate)         errors.push('Check-in date is required.');
   if (!data.checkOutDate)        errors.push('Check-out date is required.');
-  if (computed.numberOfNights <= 0) errors.push('Check-out must be after check-in.');
+  // Only show the order error when both dates are present but in the wrong order
+  if (data.checkInDate && data.checkOutDate && computed.numberOfNights <= 0) {
+    errors.push('Check-out date must be later than check-in date.');
+  }
   if (data.monthlyPrice <= 0)    errors.push('Monthly price must be greater than 0.');
   if (data.totalPrice <= 0)      errors.push('Total price must be greater than 0.');
   data.guests.forEach((g, i) => {
@@ -177,25 +180,13 @@ const App: React.FC = () => {
   useEffect(() => {
     if (isPriceManuallySet) return;
     if (computedData.numberOfNights > 0 && data.monthlyPrice > 0) {
-      setData(prev => ({ ...prev, totalPrice: Math.round((data.monthlyPrice / 30) * computedData.numberOfNights) }));
+      // Use prev.monthlyPrice (not captured data.monthlyPrice) to avoid stale closure
+      setData(prev => ({ ...prev, totalPrice: Math.round((prev.monthlyPrice / 30) * computedData.numberOfNights) }));
     }
-  }, [data.monthlyPrice, computedData.numberOfNights]);
+  }, [data.monthlyPrice, computedData.numberOfNights, isPriceManuallySet]);
 
-  // ─── Reset stale commission amounts when switching source mode ───────────
-  const prevCommissionSource = useRef(data.commissionSource);
-  useEffect(() => {
-    if (prevCommissionSource.current === data.commissionSource) return;
-    prevCommissionSource.current = data.commissionSource;
-    if (data.commissionSource === 'from_owner') {
-      // Switching away from split_agent — wipe agent and our-share amounts
-      // so the from_owner fields start clean (commissionPercent still set)
-      setData(prev => ({ ...prev, commissionAmount: 0, agentCommissionAmount: 0 }));
-    } else {
-      // Switching to split_agent — wipe from_owner commissionAmount so it
-      // doesn't linger in the "We Receive" auto field
-      setData(prev => ({ ...prev, commissionAmount: 0 }));
-    }
-  }, [data.commissionSource]);
+  // Commission source reset is handled inline in handleInputChange (see below)
+  // This avoids the useEffect firing during localStorage restore on page load.
 
   // ─── Commission auto-calc ─────────────────────────────────────────────────
   useEffect(() => {
@@ -233,7 +224,20 @@ const App: React.FC = () => {
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
   const handleInputChange = <K extends keyof ContractData>(field: K, value: ContractData[K]) => {
-    setData(prev => ({ ...prev, [field]: value }));
+    setData(prev => {
+      const next = { ...prev, [field]: value };
+      // Reset stale commission amounts when the user explicitly switches commission source.
+      // Done here (not in a useEffect) so it doesn't fire during localStorage restore.
+      if (field === 'commissionSource') {
+        if (value === 'from_owner') {
+          next.commissionAmount = 0;
+          next.agentCommissionAmount = 0;
+        } else {
+          next.commissionAmount = 0;
+        }
+      }
+      return next;
+    });
     if (field === 'monthlyPrice' || field === 'checkInDate' || field === 'checkOutDate') {
       setIsPriceManuallySet(false);
     }
@@ -381,13 +385,15 @@ const App: React.FC = () => {
   const handleAutoFill = async () => {
     if (!autoFillText.trim()) return;
 
-    const geminiKey = process.env.GEMINI_API_KEY || (import.meta as any).env?.VITE_GOOGLE_API_KEY || '';
-    const isAIAvailable = geminiKey.length > 0;
-    setAutoFillMsg(isAIAvailable ? '⏳ Parsing with AI...' : '⏳ Parsing...');
-    const parsed = await parseInquiryText(autoFillText);
+    setAutoFillMsg('⏳ Parsing...');
+    // parseInquiryText now returns { data, usedAI } so we know if Gemini or regex ran
+    const { data: parsed, usedAI } = await parseInquiryText(autoFillText);
 
     // Count filled fields BEFORE setData (avoids async closure issue)
-    let filled = Object.keys(parsed).filter(k => parsed[k] !== undefined && parsed[k] !== null && parsed[k] !== "").length;
+    const filled = Object.keys(parsed).filter(k => {
+      const v = (parsed as Record<string, unknown>)[k];
+      return v !== undefined && v !== null && v !== '';
+    }).length;
 
     if (filled === 0) {
       setAutoFillMsg('⚠ No matching fields found — try adding labels like "Guest:", "Check-in:", "Villa:", etc.');
@@ -401,32 +407,50 @@ const App: React.FC = () => {
 
     setData(prev => {
       const next = { ...prev };
-      if (parsed.villaName)    next.villaName     = parsed.villaName;
-      if (parsed.checkInDate)  next.checkInDate   = parsed.checkInDate;
-      if (parsed.checkOutDate) next.checkOutDate  = parsed.checkOutDate;
-      if (parsed.monthlyPrice) next.monthlyPrice  = parsed.monthlyPrice;
-      if (parsed.totalPrice)   next.totalPrice    = parsed.totalPrice;
+      if (parsed.villaName)    next.villaName     = parsed.villaName!;
+      if (parsed.checkInDate)  next.checkInDate   = parsed.checkInDate!;
+      if (parsed.checkOutDate) next.checkOutDate  = parsed.checkOutDate!;
+      if (parsed.monthlyPrice) next.monthlyPrice  = parsed.monthlyPrice!;
+      if (parsed.totalPrice)   next.totalPrice    = parsed.totalPrice!;
       // v2: new fields
-      if (parsed.bedrooms)         next.bedrooms = parsed.bedrooms;
-      if (parsed.securityDeposit)  next.securityDepositOverride = parsed.securityDeposit;
-      if (parsed.paymentCurrency)  next.paymentCurrency = parsed.paymentCurrency;
+      if (parsed.bedrooms)         next.bedrooms = parsed.bedrooms!;
+      if (parsed.securityDeposit)  next.securityDepositOverride = parsed.securityDeposit!;
+      if (parsed.paymentCurrency)  next.paymentCurrency = parsed.paymentCurrency as ContractData['paymentCurrency'];
       if (parsed.agent) {
         next.agent = { ...next.agent, enabled: true, company: parsed.agent };
       }
-      // Guest info
+      // Guest info (primary guest)
       if (parsed.name || parsed.passport || parsed.nationality || parsed.phone) {
         const guest = { ...next.guests[0] };
-        if (parsed.name)        guest.name           = parsed.name;
-        if (parsed.passport)    guest.passportNumber = parsed.passport;
-        if (parsed.nationality) guest.nationality    = parsed.nationality;
-        if (parsed.phone)       guest.phone          = parsed.phone;
+        if (parsed.name)        guest.name           = parsed.name!;
+        if (parsed.passport)    guest.passportNumber = parsed.passport!;
+        if (parsed.nationality) guest.nationality    = parsed.nationality!;
+        if (parsed.phone)       guest.phone          = parsed.phone!;
         next.guests = [guest, ...next.guests.slice(1)];
+      }
+      // Expand guest slots if numberOfGuests > current count (capped at MAX_GUESTS)
+      if (parsed.numberOfGuests && parsed.numberOfGuests > next.guests.length) {
+        const targetCount = Math.min(parsed.numberOfGuests, MAX_GUESTS);
+        const newGuests = [...next.guests];
+        while (newGuests.length < targetCount) {
+          newGuests.push(makeNewGuest(newGuests.length + 1));
+        }
+        next.guests = newGuests;
       }
       return next;
     });
 
-    const geminiAvail = (process.env.GEMINI_API_KEY || (import.meta as any).env?.VITE_GOOGLE_API_KEY || '').length > 0;
-    setAutoFillMsg(`✓ Auto-filled ${filled} field${filled > 1 ? 's' : ''}${geminiAvail ? ' with AI' : ''}`);
+    // Sync guestPassportFiles array length if numberOfGuests expanded guest rows
+    if (parsed.numberOfGuests && parsed.numberOfGuests > 1) {
+      const targetCount = Math.min(parsed.numberOfGuests, MAX_GUESTS);
+      setGuestPassportFiles(prev => {
+        const updated = [...prev];
+        while (updated.length < targetCount) updated.push(null);
+        return updated;
+      });
+    }
+
+    setAutoFillMsg(`✓ Auto-filled ${filled} field${filled > 1 ? 's' : ''}${usedAI ? ' with AI' : ''}`);
     setAutoFillOpen(false);
     setTimeout(() => setAutoFillMsg(''), 4000);
   };
@@ -487,7 +511,11 @@ const App: React.FC = () => {
     if (runValidation().length > 0) return;
     setIsGenerating(true);
     try {
-      const buf = autoTemplate ?? await fetchTemplateFromDrive();
+      let buf = autoTemplate;
+      if (!buf) {
+        buf = await fetchTemplateFromDrive();
+        setAutoTemplate(buf); // cache so subsequent downloads skip the network round-trip
+      }
       const { buffer, filename } = await generateDocument(buf, data, computedData);
       downloadContractLocally(buffer, filename);
       setDriveStatus('');
@@ -548,8 +576,16 @@ const App: React.FC = () => {
   const applyDuration = (months: number, days: number) => {
     if (!data.checkInDate) return;
     const d = new Date(data.checkInDate + 'T00:00:00');
-    if (months > 0) d.setMonth(d.getMonth() + months);
-    if (days   > 0) d.setDate(d.getDate() + days);
+    if (months > 0) {
+      const targetMonth = d.getMonth() + months;
+      d.setMonth(targetMonth);
+      // Clamp overflow: e.g. Jan 31 + 1 month → Mar 3 in JS; we want Feb 28.
+      // If setMonth rolled into the next month, step back to last day of intended month.
+      if (d.getMonth() !== targetMonth % 12) {
+        d.setDate(0); // setDate(0) = last day of the previous month
+      }
+    }
+    if (days > 0) d.setDate(d.getDate() + days);
     handleInputChange('checkOutDate', d.toISOString().split('T')[0]);
     setIsPriceManuallySet(false);
   };
@@ -805,8 +841,12 @@ const App: React.FC = () => {
                       ) : (
                         <div className="space-y-2.5">
                           <button onClick={handleConnectDrive}
-                            className="w-full py-2.5 bg-white text-emerald-800 hover:bg-emerald-50 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition shadow-sm active:scale-95">
-                            <CloudUpload className="w-4 h-4" /> Connect Google Drive
+                            disabled={driveStatus === 'Connecting…'}
+                            className="w-full py-2.5 bg-white text-emerald-800 hover:bg-emerald-50 disabled:bg-white/70 disabled:cursor-not-allowed rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition shadow-sm active:scale-95">
+                            {driveStatus === 'Connecting…'
+                              ? <span className="w-4 h-4 border-2 border-emerald-800 border-t-transparent rounded-full animate-spin" />
+                              : <CloudUpload className="w-4 h-4" />}
+                            {driveStatus === 'Connecting…' ? 'Connecting…' : 'Connect Google Drive'}
                           </button>
                           <p className="text-xs text-emerald-300 text-center">
                             Guest contract auto-loads from Drive on connect
