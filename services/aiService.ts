@@ -59,13 +59,38 @@ export const parseInquiryText = async (rawText: string): Promise<{ data: ParsedI
     },
   });
 
+  const currentYear = new Date().getFullYear();
   const prompt = `
-Extract the relevant property rental contract information from the following unformatted text (such as a WhatsApp inquiry or email).
-If a field is not present, omit it or leave it empty.
-Map common aliases (e.g., "30 mill", "30 jt") to the exact number (30000000).
-Ensure dates are strictly in YYYY-MM-DD format (use the current year if not specified).
+You are a smart assistant for a Bali villa rental company. Extract contract information from the raw message below.
+The message may be a WhatsApp chat, a forwarded inquiry, a quick note, or any casual text — it will NOT necessarily use labels or structured formatting.
 
-Text:
+Use context clues, common sense, and Bali rental conventions to extract:
+- villaName: the name of the villa or property (e.g. "Villa Serenity", "Seminyak 3BR villa")
+- checkInDate: arrival/start date — output strictly as YYYY-MM-DD (assume year ${currentYear} if not stated)
+- checkOutDate: departure/end date — output strictly as YYYY-MM-DD (assume year ${currentYear} if not stated)
+- monthlyPrice: the monthly / per-month rental rate as a plain integer (IDR amounts like "30jt", "30 juta", "30 mill", "30 million", "IDR 30.000.000" → 30000000; USD "3000" → 3000)
+- totalPrice: the total agreed price as a plain integer (same conversion rules)
+- bedrooms: number of bedrooms as an integer
+- securityDeposit: security deposit amount as a plain integer
+- paymentCurrency: "IDR", "USD", "EUR", or "USDT" — infer from context (Rp/juta/IDR → IDR; $ → USD)
+- paymentTerms: any stated payment arrangement (e.g. "50% upfront")
+- agent: name of the booking agent or agency (if mentioned)
+- name: full name of the primary guest/tenant
+- nationality: guest's nationality or country
+- passport: passport number (letters + digits, e.g. "A1234567")
+- phone: guest's phone or WhatsApp number
+- numberOfGuests: total number of guests / people staying
+
+Rules:
+- Omit any field you cannot confidently infer — do NOT guess
+- Never output 0 for numeric fields; omit them instead
+- If the text mentions "2 months" or "6 weeks" without an explicit checkout date, calculate checkOutDate from checkInDate
+- Prices written as "30" or "30k" with Rp context → IDR 30,000,000; written as "$30" → USD 30
+- If only one date is mentioned and context says "from X for 1 month", derive checkOutDate
+- Dates like "1 April", "April 1st", "1/4", "01-04" should resolve to ${currentYear}-04-01
+- Current year for assumptions: ${currentYear}
+
+Message:
 """
 ${rawText}
 """

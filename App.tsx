@@ -685,7 +685,7 @@ const App: React.FC = () => {
                 <div>
                   <p className="font-bold text-slate-800 text-base">Smart Auto-Fill</p>
                   <p className="text-slate-500 text-sm mt-0.5">
-                    Paste WhatsApp message, email, or any raw text — system detects &amp; fills the form
+                    Paste any client message — WhatsApp, email, notes — AI extracts everything automatically
                   </p>
                 </div>
               </div>
@@ -697,9 +697,9 @@ const App: React.FC = () => {
                   <textarea
                     value={autoFillText}
                     onChange={e => setAutoFillText(e.target.value)}
-                    rows={5}
+                    rows={6}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 font-mono placeholder-slate-400 focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 outline-none transition resize-y"
-                    placeholder={`Paste anything here:\nGuest: John Smith · Nationality: British · Passport: AB123456\nCheck-in: 1 April 2025 · Check-out: 30 April 2025\nVilla: Villa Serenity · Monthly: 30,000,000`}
+                    placeholder={`Just paste anything — WhatsApp, email, notes...\n\nExample:\n"Hi, we are 2 guests from Australia looking for Villa Serenity from 1 April to 30 April.\nMonthly rate 30jt, John Smith passport A1234567, +62 812 3456 7890"`}
                   />
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
@@ -721,8 +721,7 @@ const App: React.FC = () => {
                 </div>
                 <p className="text-xs text-slate-500">
                   <span className="text-yellow-500">💡</span>{' '}
-                  <strong className="text-slate-600">Supported labels:</strong>{' '}
-                  Name · Passport · Nationality · Phone · Check in/out · Villa · Monthly · Total
+                  Works with raw WhatsApp messages, forwarded inquiries, or any casual text — no labels needed. AI reads context.
                 </p>
               </div>
             )}
