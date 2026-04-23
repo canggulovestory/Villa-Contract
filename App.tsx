@@ -115,10 +115,27 @@ const App: React.FC = () => {
       const a = localStorage.getItem(LS_AGENTS);
       if (a) setSavedAgents(JSON.parse(a));
       // Load saved form data (auto-restored on refresh)
+      // Merge with INITIAL_DATA so any new fields added in later versions
+      // always have a default value even if the saved data predates them.
       const f = localStorage.getItem(LS_FORM_DATA);
       if (f) {
         const savedData = JSON.parse(f);
-        setData(savedData);
+        // Deep-merge top-level objects (lessor, agent, inclusions) with INITIAL_DATA
+        // so that newly added fields get their defaults, not undefined.
+        const merged = {
+          ...INITIAL_DATA,
+          ...savedData,
+          lessor:     { ...INITIAL_DATA.lessor,     ...(savedData.lessor     ?? {}) },
+          agent:      { ...INITIAL_DATA.agent,      ...(savedData.agent      ?? {}),
+            platforms: { ...INITIAL_DATA.agent.platforms, ...(savedData.agent?.platforms ?? {}) },
+          },
+          inclusions: { ...INITIAL_DATA.inclusions, ...(savedData.inclusions ?? {}) },
+          // Ensure every guest has all required fields
+          guests: (savedData.guests ?? [makeNewGuest(1)]).map((g: ReturnType<typeof makeNewGuest>) => ({
+            ...makeNewGuest(1), ...g,
+          })),
+        };
+        setData(merged);
       }
     } catch { /* ignore */ }
   }, []);
@@ -533,7 +550,7 @@ const App: React.FC = () => {
         buf = await fetchTemplateFromDrive();
         setAutoTemplate(buf); // cache so subsequent downloads skip the network round-trip
       }
-      const { buffer, filename } = await generateDocument(buf, data, computedData);
+      const { buffer, filename } = await generateDocument(buf!, data, computedData);
       downloadContractLocally(buffer, filename);
       setDriveStatus('');
       await logContractToSheet();

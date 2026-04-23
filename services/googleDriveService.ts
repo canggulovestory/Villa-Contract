@@ -95,32 +95,44 @@ export const getAccessToken = (): string | null => accessToken;
 
 // ─── Template Fetch ───────────────────────────────────────────────────────────
 
-/** Fetch any Drive file (Google Doc → .docx export, or raw .docx download). */
+/** Fetch any Drive file — works for BOTH Google Docs (export) and uploaded .docx files (raw download). */
 const fetchFileFromDrive = async (fileId: string): Promise<ArrayBuffer> => {
   if (!accessToken) throw new Error('Not signed in to Google');
+  if (!fileId) throw new Error('Template file ID is not configured. Please set VITE_DIRECT_TEMPLATE_FILE_ID or VITE_TEMPLATE_FILE_ID in Vercel environment variables.');
 
-  // Try Google Doc export first; fall back to raw download for uploaded .docx files
-  const exportUrl =
-    'https://www.googleapis.com/drive/v3/files/' +
-    fileId +
-    '/export?mimeType=application%2Fvnd.openxmlformats-officedocument.wordprocessingml.document';
+  const authHeader = { Authorization: 'Bearer ' + accessToken };
+  const DOCX_MIME  = 'application%2Fvnd.openxmlformats-officedocument.wordprocessingml.document';
 
-  const res = await fetch(exportUrl, {
-    headers: { Authorization: 'Bearer ' + accessToken },
-  });
+  // ── Path 1: Google Doc export (converts Google Doc → .docx) ──────────────
+  const exportUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${DOCX_MIME}`;
+  const exportRes = await fetch(exportUrl, { headers: authHeader });
 
-  if (!res.ok) {
-    // 401 = token expired — clear so UI shows reconnect prompt
-    if (res.status === 401) {
-      accessToken = null;
-      sessionStorage.removeItem('google_access_token');
-      throw new Error('Google session expired. Please reconnect Drive.');
-    }
-    const errText = await res.text();
-    throw new Error('Failed to fetch template from Drive (' + res.status + '): ' + errText);
+  if (exportRes.ok) return exportRes.arrayBuffer();
+
+  // 401 on export = token expired — clear and surface immediately
+  if (exportRes.status === 401) {
+    accessToken = null;
+    sessionStorage.removeItem('google_access_token');
+    throw new Error('Google session expired. Please reconnect Drive.');
   }
 
-  return res.arrayBuffer();
+  // ── Path 2: Raw binary download (for uploaded .docx / .pdf files) ────────
+  // The export API returns 4xx for non-Google-Workspace files (plain .docx uploads).
+  // Fall back to the media download endpoint which works for any binary file.
+  const downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+  const downloadRes = await fetch(downloadUrl, { headers: authHeader });
+
+  if (downloadRes.ok) return downloadRes.arrayBuffer();
+
+  if (downloadRes.status === 401) {
+    accessToken = null;
+    sessionStorage.removeItem('google_access_token');
+    throw new Error('Google session expired. Please reconnect Drive.');
+  }
+
+  // Both paths failed — surface the most useful error
+  const errText = await downloadRes.text().catch(() => '');
+  throw new Error(`Failed to fetch template from Drive (${downloadRes.status}). Make sure the file ID is correct and the file is shared with your Google account. ${errText}`);
 };
 
 /** Fetch the 3rd-Party / Agent contract template. */
