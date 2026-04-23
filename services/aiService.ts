@@ -5,6 +5,22 @@ import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 const apiKey = process.env.GEMINI_API_KEY || (import.meta as any).env?.VITE_GOOGLE_API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
 
+/** Returns true if the Gemini API key is configured — false means AI features won't work. */
+export const isGeminiAvailable = (): boolean => !!apiKey;
+
+/** Parse a Gemini API error to surface the real cause to the user. */
+function parseGeminiError(error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error);
+  if (!apiKey) return 'Gemini API key is not configured. Ask your administrator to set GEMINI_API_KEY in Vercel environment variables.';
+  if (msg.includes('API key not valid') || msg.includes('API_KEY_INVALID') || msg.includes('401'))
+    return 'Gemini API key is invalid or expired. Please check the GEMINI_API_KEY in Vercel settings.';
+  if (msg.includes('quota') || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED'))
+    return 'Gemini API quota exceeded. Try again in a few minutes.';
+  if (msg.includes('404') || msg.includes('not found') || msg.includes('model'))
+    return 'Gemini model not available. The API key may not have access to gemini-2.5-flash.';
+  return msg || 'Unknown AI error';
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ParsedInquiry {
@@ -27,10 +43,19 @@ export interface ParsedInquiry {
 
 /**
  * Parses raw text from an inquiry (e.g. WhatsApp message) into structured ContractData overrides.
- * Returns `{ data, usedAI }` — usedAI is true when Gemini parsed successfully, false when regex fallback was used.
+ * Returns `{ data, usedAI, aiError }` — usedAI is true when Gemini parsed successfully.
+ * aiError contains the human-readable reason when AI was unavailable.
  */
-export const parseInquiryText = async (rawText: string): Promise<{ data: ParsedInquiry; usedAI: boolean }> => {
-  // Try to use the faster, cheaper 1.5 Flash model
+export const parseInquiryText = async (rawText: string): Promise<{ data: ParsedInquiry; usedAI: boolean; aiError?: string }> => {
+  // Skip Gemini entirely if no API key — go straight to regex fallback
+  if (!apiKey) {
+    return {
+      data: parseRawTextFallback(rawText),
+      usedAI: false,
+      aiError: 'Gemini API key not configured (GEMINI_API_KEY missing from Vercel environment variables). Using basic text parser instead.',
+    };
+  }
+
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.5-flash',
     generationConfig: {
@@ -101,8 +126,9 @@ ${rawText}
     const response = result.response;
     return { data: JSON.parse(response.text()) as ParsedInquiry, usedAI: true };
   } catch (error) {
-    console.error('Failed to parse inquiry with Gemini — falling back to regex parser:', error);
-    return { data: parseRawTextFallback(rawText), usedAI: false };
+    const aiError = parseGeminiError(error);
+    console.error('Gemini auto-fill failed:', aiError, error);
+    return { data: parseRawTextFallback(rawText), usedAI: false, aiError };
   }
 };
 
@@ -188,6 +214,11 @@ const fileToGenerativePart = async (file: File) => {
  * Extracts Full Name and Passport Number from a passport image photo using Gemini Vision.
  */
 export const extractPassportData = async (file: File): Promise<{ extractedName: string; extractedPassport: string }> => {
+  // Fail fast with a useful message if the API key is not configured
+  if (!apiKey) {
+    throw new Error('AI scan is not available — GEMINI_API_KEY is not configured in Vercel. Please enter passport details manually.');
+  }
+
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.5-flash',
     generationConfig: {
@@ -215,7 +246,8 @@ export const extractPassportData = async (file: File): Promise<{ extractedName: 
       extractedPassport: parsed.extractedPassport || '',
     };
   } catch (error) {
-    console.error('Failed to parse passport with Gemini Vision:', error);
-    throw new Error('Image parsing failed. Please manually enter details.');
+    const reason = parseGeminiError(error);
+    console.error('Gemini passport scan failed:', reason, error);
+    throw new Error(`Passport scan failed: ${reason} — please enter details manually.`);
   }
 };

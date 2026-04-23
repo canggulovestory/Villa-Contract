@@ -14,7 +14,7 @@ import {
   fetchVillaListFromSheets, VillaRow,
   saveDealToDrive, PassportFile,
 } from './services/googleDriveService';
-import { parseInquiryText } from './services/aiService';
+import { parseInquiryText, isGeminiAvailable } from './services/aiService';
 import {
   appendContractRow, saveAgentToSheet, saveOwnerToSheet, isSheetsWriteAvailable,
 } from './services/googleSheetsService';
@@ -410,9 +410,9 @@ const App: React.FC = () => {
   const handleAutoFill = async () => {
     if (!autoFillText.trim()) return;
 
-    setAutoFillMsg('⏳ Parsing...');
-    // parseInquiryText now returns { data, usedAI } so we know if Gemini or regex ran
-    const { data: parsed, usedAI } = await parseInquiryText(autoFillText);
+    setAutoFillMsg(isGeminiAvailable() ? '⏳ Parsing with AI...' : '⏳ Parsing...');
+    // parseInquiryText now returns { data, usedAI, aiError }
+    const { data: parsed, usedAI, aiError } = await parseInquiryText(autoFillText);
 
     // Count filled fields BEFORE setData (avoids async closure issue)
     const filled = Object.keys(parsed).filter(k => {
@@ -421,8 +421,13 @@ const App: React.FC = () => {
     }).length;
 
     if (filled === 0) {
-      setAutoFillMsg('⚠ No matching fields found — try adding labels like "Guest:", "Check-in:", "Villa:", etc.');
-      setTimeout(() => setAutoFillMsg(''), 5000);
+      // If AI failed, tell the user WHY — not just "no fields found"
+      if (aiError) {
+        setAutoFillMsg(`⚠ AI unavailable: ${aiError}`);
+      } else {
+        setAutoFillMsg('⚠ No matching fields found — try adding labels like "Guest:", "Villa:", "Check-in:", etc.');
+      }
+      setTimeout(() => setAutoFillMsg(''), 8000);
       return;
     }
 
@@ -475,7 +480,8 @@ const App: React.FC = () => {
       });
     }
 
-    setAutoFillMsg(`✓ Auto-filled ${filled} field${filled > 1 ? 's' : ''}${usedAI ? ' with AI' : ''}`);
+    const modeLabel = usedAI ? ' with AI ✨' : aiError ? ' (basic parser — AI unavailable)' : '';
+    setAutoFillMsg(`✓ Auto-filled ${filled} field${filled > 1 ? 's' : ''}${modeLabel}`);
     setAutoFillOpen(false);
     setTimeout(() => setAutoFillMsg(''), 4000);
   };
@@ -727,7 +733,18 @@ const App: React.FC = () => {
             </button>
             {autoFillOpen && (
               <div className="px-5 pb-5 space-y-3 border-t border-emerald-100">
-                <div className="pt-3">
+                {!isGeminiAvailable() && (
+                  <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-2 text-sm text-amber-800">
+                    <span className="text-amber-500 text-base flex-shrink-0 mt-0.5">⚠️</span>
+                    <div>
+                      <p className="font-semibold">AI not configured — using basic text parser</p>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        Set <code className="bg-amber-100 px-1 rounded font-mono">GEMINI_API_KEY</code> in Vercel → Project Settings → Environment Variables to enable full AI extraction.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <div className="pt-1">
                   <textarea
                     value={autoFillText}
                     onChange={e => setAutoFillText(e.target.value)}
