@@ -131,23 +131,31 @@ const App: React.FC = () => {
   }, [data]);
 
   // ─── Auto-load BOTH templates + villa list from Drive/Sheets on connect ──
+  // Uses Promise.allSettled so a missing/misconfigured template ID doesn't
+  // block the other template or the villa list from loading successfully.
   useEffect(() => {
     if (!driveConnected) return;
     setTemplateBanner('loading');
-    Promise.all([
+    Promise.allSettled([
       fetchTemplateFromDrive(),
       fetchDirectTemplateFromDrive(),
-      fetchVillaListFromSheets().catch(() => [] as VillaRow[]), // non-fatal
-    ]).then(([buf3p, bufDirect, villas]) => {
-      setAutoTemplate(buf3p);
-      setAutoDirectTemplate(bufDirect);
-      setTemplateBanner('loaded');
-      setSheetVillas(villas);
-    }).catch((err: unknown) => {
-      setTemplateBanner('failed');
-      // If token expired while auto-loading, reset connected state so user sees reconnect button
-      if (err instanceof Error && err.message.includes('session expired')) {
-        setDriveConnected(false);
+      fetchVillaListFromSheets(),
+    ]).then(([r3p, rDirect, rVillas]) => {
+      // Each result is independent — one failing doesn't kill the others
+      if (r3p.status === 'fulfilled')     setAutoTemplate(r3p.value);
+      if (rDirect.status === 'fulfilled') setAutoDirectTemplate(rDirect.value);
+      setSheetVillas(rVillas.status === 'fulfilled' ? rVillas.value : []);
+
+      // Banner: "loaded" if guest/direct template worked, "failed" otherwise
+      if (rDirect.status === 'fulfilled') {
+        setTemplateBanner('loaded');
+      } else {
+        setTemplateBanner('failed');
+        // Session expired? Reset so user sees reconnect button
+        const err = (rDirect as PromiseRejectedResult).reason;
+        if (err instanceof Error && err.message.includes('session expired')) {
+          setDriveConnected(false);
+        }
       }
     });
   }, [driveConnected]);
@@ -480,7 +488,11 @@ const App: React.FC = () => {
       catch (e: unknown) { setGenerateError(e instanceof Error ? e.message : 'Failed to fetch template.'); setDriveStatus(''); return null; }
     }
     if (localTemplateFile) return localTemplateFile;
-    setFormErrors(['Please connect Google Drive or upload a .docx template.']);
+    // No template from any source — scroll to the Generate section and explain
+    setGenerateError(
+      'No contract template found. You have two options: (1) Connect Google Drive in the Generate Contract section — templates load automatically, or (2) Upload your own .docx template file using "Choose File" in the same section.'
+    );
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
     return null;
   };
 
@@ -507,8 +519,13 @@ const App: React.FC = () => {
 
   const handleDownload3rdParty = async () => {
     setFormErrors([]); setGenerateError(''); setSavedDriveLink('');
-    if (!driveConnected && !autoTemplate) { setGenerateError('Connect Google Drive to use the 3rd Party Contract template.'); return; }
     if (runValidation().length > 0) return;
+    // Require Drive for the 3rd party template (it only lives in Drive)
+    if (!driveConnected && !autoTemplate) {
+      setGenerateError('The 3rd Party Contract template comes from Google Drive. Please connect Google Drive in the Template Source section below.');
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      return;
+    }
     setIsGenerating(true);
     try {
       let buf = autoTemplate;
@@ -914,8 +931,8 @@ const App: React.FC = () => {
                     <div className="space-y-2">
                       <div>
                         <button onClick={handleDownload3rdParty}
-                          disabled={isGenerating || (!driveConnected && !autoTemplate)}
-                          title={!driveConnected && !autoTemplate ? 'Connect Google Drive to use this template' : 'Agent ↔ TVM agreement for bookings sourced by an external agent'}
+                          disabled={isGenerating}
+                          title="Agent ↔ TVM agreement for bookings sourced by an external agent"
                           className="w-full py-3 bg-white hover:bg-emerald-50 disabled:bg-white/30 disabled:cursor-not-allowed text-emerald-800 disabled:text-emerald-600/40 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition shadow-sm active:scale-95">
                           <Zap className="w-4 h-4 text-yellow-500" />
                           {isGenerating ? 'Generating…' : '3rd Party Contract'}
@@ -923,8 +940,7 @@ const App: React.FC = () => {
                         <p className="text-xs text-center text-emerald-700/50 mt-1">For agent-sourced bookings — TVM ↔ Agent agreement</p>
                       </div>
                       <button onClick={handleDownload}
-                        disabled={isGenerating || (!driveConnected && !autoDirectTemplate && !localTemplateFile)}
-                        title={!driveConnected && !autoDirectTemplate && !localTemplateFile ? 'Connect Google Drive to use this template' : ''}
+                        disabled={isGenerating}
                         className="w-full py-3 bg-emerald-900 hover:bg-emerald-950 disabled:bg-emerald-900/50 disabled:cursor-not-allowed text-white disabled:text-white/40 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition shadow-md active:scale-95">
                         <FileDown className="w-4 h-4" />
                         {isGenerating ? 'Generating…' : 'Download Contract'}

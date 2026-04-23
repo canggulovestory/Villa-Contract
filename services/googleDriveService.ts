@@ -58,6 +58,10 @@ export const initGoogleAuth = (): Promise<void> => {
 
 export const signInToGoogle = (): Promise<string> => {
   return new Promise((resolve, reject) => {
+    if (!CLIENT_ID) {
+      reject(new Error('Google Drive is not configured for this app. The VITE_GOOGLE_CLIENT_ID environment variable is missing. Please contact the administrator.'));
+      return;
+    }
     if (!tokenClient) {
       reject(new Error('Google Auth not initialised. Call initGoogleAuth() first.'));
       return;
