@@ -280,6 +280,73 @@ export const generateDocument = async (
       if (!data.inclusions.electricity) excluded.push('Electricity');
       return excluded.length > 0 ? excluded.join(', ') : 'None';
     })(),
+
+    // ── UPPERCASE aliases for the "3RD PARTY LEASE AGREEMENT" template format ──────────────
+    // Property
+    PROPERTY_NAME:       data.villaName,
+    PROPERTY_ADDRESS:    data.villaAddress,
+    PROPERTY_CODE:       data.propertyCode ?? '',
+    NUMBER_OF_BEDROOMS:  String(data.bedrooms),
+    // Dates & Duration
+    AGREEMENT_DATE:      formatDate(today),
+    START_DATE:          formatDate(data.checkInDate),
+    END_DATE:            formatDate(data.checkOutDate),
+    CHECK_IN_DATE_TIME:  formatDate(data.checkInDate),
+    CHECK_OUT_DATE_TIME: formatDate(data.checkOutDate),
+    LEASE_DURATION:      computed.numberOfNights > 0
+      ? `${computed.numberOfNights} nights (${computed.numberOfMonths} months)`
+      : '',
+    // Financials
+    MONTHLY_RENT_AMOUNT:      formatAmount(data.monthlyPrice),
+    TOTAL_RENT_AMOUNT:        formatAmount(data.totalPrice),
+    CURRENCY:                 currency,
+    SECURITY_DEPOSIT_AMOUNT:  formatAmount(computed.securityDeposit),
+    FIRST_PAYMENT_AMOUNT:     data.firstPaymentAmount ?? '',
+    FIRST_PAYMENT_DUE_DATE:   formatDate(data.paymentDueDate),
+    FOLLOWING_PAYMENT_DETAILS: [
+      data.followingPaymentAmount,
+      data.followingPaymentDueDate ? `due ${formatDate(data.followingPaymentDueDate)}` : '',
+    ].filter(Boolean).join(' — '),
+    PAYMENT_METHOD: data.paymentTerms || 'Bank Transfer',
+    // Lessee (Guest)
+    LESSEE_NAME:           primaryGuest?.name            ?? '',
+    LESSEE_NATIONALITY:    primaryGuest?.nationality     ?? '',
+    LESSEE_PASSPORT_NUMBER: primaryGuest?.passportNumber ?? '',
+    LESSEE_KTP_NUMBER:     primaryGuest?.passportNumber  ?? '', // same field
+    LESSEE_PHONE:          primaryGuest?.phone           ?? '',
+    LESSEE_BIRTH_PLACE_DATE: legacyGuestData.lesseePlaceAndDOB,
+    LESSEE_ADDRESS:        '',   // not collected — fill manually
+    LESSEE_EMAIL:          '',   // not collected — fill manually
+    LESSEE_PASSPORT_EXPIRY: '',  // not collected — fill manually
+    // Lessor (Property Owner)
+    LESSOR_NAME:            lessor.enabled ? lessor.name        : '',
+    LESSOR_NATIONALITY:     lessor.enabled ? lessor.nationality : '',
+    LESSOR_ADDRESS:         lessor.enabled ? lessor.address     : '',
+    LESSOR_PHONE:           lessor.enabled ? lessor.phone       : '',
+    LESSOR_EMAIL:           lessor.enabled ? lessor.email       : '',
+    LESSOR_KTP_NUMBER:      lessor.enabled ? lessor.idNumber    : '',
+    LESSOR_PASSPORT_NUMBER: lessor.enabled ? lessor.idNumber    : '', // same field
+    LESSOR_BIRTH_PLACE_DATE: '', // not collected — fill manually
+    LESSOR_PASSPORT_EXPIRY:  '', // not collected — fill manually
+    // Owner/TVM bank (where lessee pays)
+    OWNER_BANK_NAME:      BANK.name,
+    OWNER_ACCOUNT_NAME:   BANK.accountName,
+    OWNER_ACCOUNT_NUMBER: currency === 'EUR' ? BANK.eur : currency === 'AUD' ? BANK.aud : BANK.idr,
+    // Agent / Commission
+    AGENT_REPRESENTATIVE_NAME: agent.enabled
+      ? (agent.picName || agent.fullName || agent.company)
+      : '',
+    COMMISSION_PERCENTAGE: data.agentCommissionPercent > 0
+      ? `${data.agentCommissionPercent}%`
+      : data.commissionPercent > 0 ? `${data.commissionPercent}%` : '',
+    COMMISSION_PAYMENT_TERMS: data.commissionNotes || '',
+    REMITTANCE_DAYS: '', // not collected — fill manually (e.g. "7 days after check-in")
+    // Inclusions — frequency text
+    CLEANING_FREQUENCY:   data.inclusions.cleaning2x  ? '2x per week'  : 'Not included',
+    POOL_CLEANING_FREQUENCY: data.inclusions.pool2x   ? '2x per week'  : 'Not included',
+    LINEN_CHANGE_FREQUENCY:  data.inclusions.laundry  ? '1x per stay'  : 'Not included',
+    BANJAR_FEES_YN:       data.inclusions.banjarFee   ? 'Yes' : 'No',
+    GARBAGE_FEES_YN:      data.inclusions.rubbishFee  ? 'Yes' : 'No',
   };
 
   // ── 8. Render
