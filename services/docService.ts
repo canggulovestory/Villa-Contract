@@ -252,6 +252,34 @@ export const generateDocument = async (
     bankSWIFT:       BANK.swift,
     bankCode:        BANK.bankCode,
     bankBranchCode:  BANK.branchCode,
+    // {{bankAccountNumber}} — picks the right account number for the chosen currency
+    bankAccountNumber: currency === 'EUR' ? BANK.eur : currency === 'AUD' ? BANK.aud : BANK.idr,
+
+    // {{securityDepositPercentage}} — e.g. "10%" or the override expressed as a %
+    securityDepositPercentage: data.securityDepositOverride > 0 && data.totalPrice > 0
+      ? `${Math.round(data.securityDepositOverride / data.totalPrice * 100)}%`
+      : '10%',
+
+    // {{paymentMethod}} — free text; defaults to "Bank Transfer" if not in paymentTerms
+    paymentMethod: data.paymentTerms
+      ? data.paymentTerms
+      : 'Bank Transfer',
+
+    // {{includedItems}} — same content as {{inclusionsList}}, alias for templates using this name
+    includedItems: computed.inclusionsList,
+
+    // {{excludedItems}} — the items NOT ticked; useful for templates that list exclusions
+    excludedItems: (() => {
+      const excluded: string[] = [];
+      if (!data.inclusions.cleaning2x)  excluded.push('Cleaning 2x/week');
+      if (!data.inclusions.pool2x)      excluded.push('Pool Maintenance 2x/week');
+      if (!data.inclusions.internet)    excluded.push('Internet / WiFi');
+      if (!data.inclusions.banjarFee)   excluded.push('Banjar Fee');
+      if (!data.inclusions.rubbishFee)  excluded.push('Rubbish Collection Fee');
+      if (!data.inclusions.laundry)     excluded.push('Laundry Linen & Towels');
+      if (!data.inclusions.electricity) excluded.push('Electricity');
+      return excluded.length > 0 ? excluded.join(', ') : 'None';
+    })(),
   };
 
   // ── 8. Render
