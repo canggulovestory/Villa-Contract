@@ -52,8 +52,10 @@ export const generateDocument = async (
     guestData[`guest${num}Passport`]    = guest.passportNumber;
     guestData[`guest${num}Nationality`] = guest.nationality;
     guestData[`guest${num}Phone`]       = guest.phone;
-    guestData[`guest${num}Birthplace`]  = guest.birthplace;
-    guestData[`guest${num}Birthday`]    = guest.birthday ? formatDate(guest.birthday) : '';
+    guestData[`guest${num}Birthplace`]     = guest.birthplace;
+    guestData[`guest${num}Birthday`]       = guest.birthday ? formatDate(guest.birthday) : '';
+    guestData[`guest${num}Email`]          = guest.email ?? '';
+    guestData[`guest${num}PassportExpiry`] = guest.passportExpiry ? formatDate(guest.passportExpiry) : '';
     // Combined "Place & Date of Birth" — matches "PLACE & DATE OF BIRTH" in template
     guestData[`guest${num}PlaceAndDOB`] = [
       guest.birthplace,
@@ -64,10 +66,12 @@ export const generateDocument = async (
   // ── 2. Backward-compatible legacy guest tags
   const primaryGuest = data.guests[0];
   const legacyGuestData: Record<string, string> = {
-    lesseeName:       primaryGuest?.name            ?? '',
-    passportNumber:   primaryGuest?.passportNumber  ?? '',
-    lesseeBirthplace: primaryGuest?.birthplace      ?? '',
-    lesseeBirthday:   primaryGuest?.birthday ? formatDate(primaryGuest.birthday) : '',
+    lesseeName:           primaryGuest?.name            ?? '',
+    passportNumber:       primaryGuest?.passportNumber  ?? '',
+    lesseeEmail:          primaryGuest?.email           ?? '',
+    lesseePassportExpiry: primaryGuest?.passportExpiry ? formatDate(primaryGuest.passportExpiry) : '',
+    lesseeBirthplace:     primaryGuest?.birthplace      ?? '',
+    lesseeBirthday:       primaryGuest?.birthday ? formatDate(primaryGuest.birthday) : '',
     lesseePlaceAndDOB: [
       primaryGuest?.birthplace,
       primaryGuest?.birthday ? formatDate(primaryGuest.birthday) : '',
@@ -315,19 +319,20 @@ export const generateDocument = async (
     LESSEE_KTP_NUMBER:     primaryGuest?.passportNumber  ?? '', // same field
     LESSEE_PHONE:          primaryGuest?.phone           ?? '',
     LESSEE_BIRTH_PLACE_DATE: legacyGuestData.lesseePlaceAndDOB,
-    LESSEE_ADDRESS:        '',   // not collected — fill manually
-    LESSEE_EMAIL:          '',   // not collected — fill manually
-    LESSEE_PASSPORT_EXPIRY: '',  // not collected — fill manually
+    LESSEE_ADDRESS:         '',  // not collected — fill manually
+    LESSEE_EMAIL:           primaryGuest?.email ?? '',
+    LESSEE_PASSPORT_EXPIRY: primaryGuest?.passportExpiry ? formatDate(primaryGuest.passportExpiry) : '',
     // Lessor (Property Owner)
     LESSOR_NAME:            lessor.enabled ? lessor.name        : '',
     LESSOR_NATIONALITY:     lessor.enabled ? lessor.nationality : '',
     LESSOR_ADDRESS:         lessor.enabled ? lessor.address     : '',
     LESSOR_PHONE:           lessor.enabled ? lessor.phone       : '',
     LESSOR_EMAIL:           lessor.enabled ? lessor.email       : '',
-    LESSOR_KTP_NUMBER:      lessor.enabled ? lessor.idNumber    : '',
-    LESSOR_PASSPORT_NUMBER: lessor.enabled ? lessor.idNumber    : '', // same field
+    LESSOR_KTP_NUMBER:      lessor.enabled ? lessor.idNumber      : '',
+    LESSOR_PASSPORT_NUMBER: lessor.enabled ? lessor.idNumber      : '',
     LESSOR_BIRTH_PLACE_DATE: '', // not collected — fill manually
-    LESSOR_PASSPORT_EXPIRY:  '', // not collected — fill manually
+    LESSOR_PASSPORT_EXPIRY: lessor.enabled && lessor.passportExpiry
+      ? formatDate(lessor.passportExpiry) : '',
     // Owner/TVM bank (where lessee pays)
     OWNER_BANK_NAME:      BANK.name,
     OWNER_ACCOUNT_NAME:   BANK.accountName,
@@ -340,7 +345,7 @@ export const generateDocument = async (
       ? `${data.agentCommissionPercent}%`
       : data.commissionPercent > 0 ? `${data.commissionPercent}%` : '',
     COMMISSION_PAYMENT_TERMS: data.commissionNotes || '',
-    REMITTANCE_DAYS: '', // not collected — fill manually (e.g. "7 days after check-in")
+    REMITTANCE_DAYS: data.remittanceDays || '',
     // Inclusions — frequency text
     CLEANING_FREQUENCY:   data.inclusions.cleaning2x  ? '2x per week'  : 'Not included',
     POOL_CLEANING_FREQUENCY: data.inclusions.pool2x   ? '2x per week'  : 'Not included',

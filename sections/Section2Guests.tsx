@@ -54,12 +54,14 @@ export const Section2Guests: React.FC<Props> = ({
             />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {([
-                { field: 'name' as const,          label: 'Full Name',        req: true,  type: 'text', ph: 'As on passport' },
-                { field: 'passportNumber' as const, label: 'Passport No.',     req: true,  type: 'text', ph: 'e.g. A1234567' },
-                { field: 'nationality' as const,    label: 'Nationality',      req: true,  type: 'text', ph: 'e.g. Australian' },
-                { field: 'phone' as const,          label: 'Phone / WhatsApp', req: false, type: 'text', ph: '+62 …' },
-                { field: 'birthplace' as const,     label: 'Place of Birth',   req: false, type: 'text', ph: 'e.g. London' },
-                { field: 'birthday' as const,       label: 'Date of Birth',    req: false, type: 'date', ph: '' },
+                { field: 'name' as const,           label: 'Full Name',        req: true,  type: 'text',  ph: 'As on passport' },
+                { field: 'passportNumber' as const,  label: 'Passport No.',     req: true,  type: 'text',  ph: 'e.g. A1234567' },
+                { field: 'passportExpiry' as const,  label: 'Passport Expiry',  req: false, type: 'date',  ph: '' },
+                { field: 'nationality' as const,     label: 'Nationality',      req: true,  type: 'text',  ph: 'e.g. Australian' },
+                { field: 'phone' as const,           label: 'Phone / WhatsApp', req: false, type: 'text',  ph: '+62 …' },
+                { field: 'email' as const,           label: 'Email',            req: false, type: 'email', ph: 'guest@email.com' },
+                { field: 'birthplace' as const,      label: 'Place of Birth',   req: false, type: 'text',  ph: 'e.g. London' },
+                { field: 'birthday' as const,        label: 'Date of Birth',    req: false, type: 'date',  ph: '' },
               ] as const).map(({ field, label, req, type, ph }) => (
                 <div key={field}>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">

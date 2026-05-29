@@ -14,7 +14,9 @@ export interface Guest {
   birthday: string;      // ISO date string e.g. "1990-05-12"
   nationality: string;
   phone: string;
+  email: string;         // guest email — used in templates
   passportNumber: string;
+  passportExpiry: string; // ISO date — e.g. "2030-06-15"
 }
 
 // ─── Lessor / Property Owner ───────────────────────────────────────────────
@@ -22,6 +24,7 @@ export interface LessorData {
   enabled: boolean;
   name: string;
   idNumber: string;       // KTP / Passport number
+  passportExpiry: string; // Passport expiry date — ISO
   nationality: string;
   address: string;
   phone: string;
@@ -113,6 +116,7 @@ export interface ContractData {
   commissionPercent: number;         // % used when source = from_owner
   commissionAmount: number;          // TVM's final take (always auto or manual)
   commissionNotes: string;           // e.g. "Paid within 7 days of check-in"
+  remittanceDays: string;            // e.g. "7" — days after check-in when agent remits to owner
   // Split-with-Agent extras
   agentCommissionPercent: number;    // agent's % of deal (split_agent mode)
   agentCommissionAmount: number;     // auto-calculated agent $ amount
@@ -156,13 +160,16 @@ export const makeNewGuest = (num: number): Guest => ({
   birthday: '',
   nationality: '',
   phone: '',
+  email: '',
   passportNumber: '',
+  passportExpiry: '',
 });
 
 export const INITIAL_LESSOR: LessorData = {
   enabled: false,
   name: '',
   idNumber: '',
+  passportExpiry: '',
   nationality: 'Indonesian',
   address: '',
   phone: '',
@@ -223,6 +230,7 @@ export const INITIAL_DATA: ContractData = {
   commissionPercent: 0,
   commissionAmount: 0,
   commissionNotes: '',
+  remittanceDays: '',
   agentCommissionPercent: 0,
   agentCommissionAmount: 0,
   tvmSplitPercent: 50,

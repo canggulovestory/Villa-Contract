@@ -63,18 +63,19 @@ export const Section6Owner: React.FC<Props> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {([
-            { field: 'name' as const,       label: 'Full Name',          req: true,  ph: 'Owner full name' },
-            { field: 'idNumber' as const,    label: 'KTP / Passport No.', req: false, ph: 'ID number' },
-            { field: 'nationality' as const, label: 'Nationality',        req: false, ph: 'e.g. Indonesian' },
-            { field: 'phone' as const,       label: 'Phone',              req: false, ph: '+62 …' },
-            { field: 'email' as const,       label: 'Email',              req: false, ph: 'owner@email.com' },
-          ] as const).map(({ field, label, req, ph }) => (
+            { field: 'name' as const,          label: 'Full Name',          req: true,  type: 'text', ph: 'Owner full name' },
+            { field: 'idNumber' as const,       label: 'KTP / Passport No.', req: false, type: 'text', ph: 'ID number' },
+            { field: 'passportExpiry' as const,  label: 'Passport Expiry',   req: false, type: 'date', ph: '' },
+            { field: 'nationality' as const,    label: 'Nationality',        req: false, type: 'text', ph: 'e.g. Indonesian' },
+            { field: 'phone' as const,          label: 'Phone',              req: false, type: 'text', ph: '+62 …' },
+            { field: 'email' as const,          label: 'Email',              req: false, type: 'text', ph: 'owner@email.com' },
+          ] as const).map(({ field, label, req, type, ph }) => (
             <div key={field}>
               <label className="block text-xs font-semibold text-slate-600 mb-1">
                 {label} {req && <span className="text-red-400">*</span>}
               </label>
               <input
-                type="text"
+                type={type}
                 value={data.lessor[field] as string}
                 onChange={e => onLessorChange(field, e.target.value)}
                 placeholder={ph}

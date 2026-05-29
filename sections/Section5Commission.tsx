@@ -208,16 +208,32 @@ export const Section5Commission: React.FC<Props> = ({ data, handleInputChange })
           </div>
         )}
 
-        {/* Notes */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">Payment Notes (optional)</label>
-          <input
-            type="text"
-            value={data.commissionNotes}
-            onChange={e => handleInputChange('commissionNotes', e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-amber-400 outline-none transition"
-            placeholder="e.g. Paid within 7 days of check-in"
-          />
+        {/* Notes + Remittance */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Payment Notes (optional)</label>
+            <input
+              type="text"
+              value={data.commissionNotes}
+              onChange={e => handleInputChange('commissionNotes', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-amber-400 outline-none transition"
+              placeholder="e.g. Paid within 7 days of check-in"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Remittance Days (optional)</label>
+            <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden">
+              <input
+                type="number" min={1} max={90}
+                value={data.remittanceDays || ''}
+                onChange={e => handleInputChange('remittanceDays', e.target.value)}
+                className="flex-1 px-3 py-2 text-sm font-mono outline-none"
+                placeholder="e.g. 7"
+              />
+              <span className="px-3 py-2 text-slate-500 text-xs bg-slate-50 border-l border-slate-200">days</span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">Days after check-in to remit to owner</p>
+          </div>
         </div>
 
       </div>
