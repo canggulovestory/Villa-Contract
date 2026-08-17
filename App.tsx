@@ -224,6 +224,9 @@ const App: React.FC = () => {
         if (data.agentCommissionAmount > 0 && data.tvmSplitPercent > 0) {
           const ourAmt = Math.round(data.agentCommissionAmount * data.tvmSplitPercent / 100);
           setData(prev => ({ ...prev, commissionAmount: ourAmt }));
+        } else {
+          // Clear stale share when the agent amount or split is removed.
+          setData(prev => ({ ...prev, commissionAmount: 0 }));
         }
       } else {
         // Percent mode: derive agent total from percent, then our share
@@ -231,6 +234,9 @@ const App: React.FC = () => {
           const agentAmt = Math.round(base * data.agentCommissionPercent / 100);
           const ourAmt   = data.tvmSplitPercent > 0 ? Math.round(agentAmt * data.tvmSplitPercent / 100) : 0;
           setData(prev => ({ ...prev, agentCommissionAmount: agentAmt, commissionAmount: ourAmt }));
+        } else {
+          // Clear stale amounts when the percent or base is removed.
+          setData(prev => ({ ...prev, agentCommissionAmount: 0, commissionAmount: 0 }));
         }
       }
       return;
@@ -238,9 +244,13 @@ const App: React.FC = () => {
 
     // from_owner mode
     if (data.commissionType === 'fixed') return;
-    if (data.commissionPercent > 0 && base > 0) {
-      setData(prev => ({ ...prev, commissionAmount: Math.round(base * prev.commissionPercent / 100) }));
-    }
+    // Recompute unconditionally so a cleared percent/base zeroes the amount instead of leaving it stale.
+    setData(prev => ({
+      ...prev,
+      commissionAmount: (data.commissionPercent > 0 && base > 0)
+        ? Math.round(base * prev.commissionPercent / 100)
+        : 0,
+    }));
   }, [
     data.commissionSource, data.commissionType,
     data.commissionPercent, data.agentCommissionPercent, data.agentCommissionAmount,
@@ -626,7 +636,12 @@ const App: React.FC = () => {
       }
     }
     if (days > 0) d.setDate(d.getDate() + days);
-    handleInputChange('checkOutDate', d.toISOString().split('T')[0]);
+    // Format from LOCAL date parts — toISOString() would shift to the previous day
+    // in positive-UTC timezones (e.g. Bali/Singapore UTC+8), giving a checkout one day early.
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    handleInputChange('checkOutDate', `${y}-${mo}-${da}`);
     setIsPriceManuallySet(false);
   };
   const handleDurationPill = (label: string, months: number, days: number) => {

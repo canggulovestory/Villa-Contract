@@ -3,10 +3,10 @@
 
 export const SECURITY_DEPOSIT_RATE = 0.10; // 10% — change in one place
 
-export type PaymentCurrency = 'IDR' | 'USD' | 'EUR' | 'USDT';
+export type PaymentCurrency = 'IDR' | 'USD' | 'EUR' | 'USDT' | 'AUD';
 
 export const CURRENCY_SYMBOLS: Record<PaymentCurrency, string> = {
-  IDR: 'Rp', USD: '$', EUR: '€', USDT: 'USDT',
+  IDR: 'Rp', USD: '$', EUR: '€', USDT: 'USDT', AUD: 'A$',
 };
 
 /** Format a number for display based on selected currency */
