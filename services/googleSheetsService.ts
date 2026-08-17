@@ -96,7 +96,7 @@ const ensureTab = async (tabName: string, headers: string[]): Promise<void> => {
 const appendRow = async (tabName: string, values: (string | number)[]): Promise<void> => {
   const range = encodeURIComponent(`${tabName}!A:A`);
   const res = await sheetsApi(
-    `/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    `/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     {
       method: 'POST',
       body: JSON.stringify({ values: [values] }),
@@ -127,7 +127,7 @@ const findRowByValue = async (tabName: string, colIndex: number, searchValue: st
 /** Update a specific row in a tab */
 const updateRow = async (tabName: string, rowNumber: number, values: (string | number)[]): Promise<void> => {
   const range = encodeURIComponent(`${tabName}!A${rowNumber}`);
-  const res = await sheetsApi(`/values/${range}?valueInputOption=USER_ENTERED`, {
+  const res = await sheetsApi(`/values/${range}?valueInputOption=RAW`, {
     method: 'PUT',
     body: JSON.stringify({ values: [values] }),
   });

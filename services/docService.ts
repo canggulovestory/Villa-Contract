@@ -143,8 +143,12 @@ export const generateDocument = async (
   // ── 6. Commission calculation base label
   const isOwner = data.copyType === 'OWNER';
   let commissionBaseLabel = '';
-  if (data.commissionType === 'percent_total')   commissionBaseLabel = `${data.commissionPercent}% of Total Rent`;
-  if (data.commissionType === 'percent_monthly') commissionBaseLabel = `${data.commissionPercent}% of Monthly Rent`;
+  // On split-agent deals the rate shown must be the agent's %, not TVM's commissionPercent.
+  const labelPercent = data.commissionSource === 'split_agent'
+    ? data.agentCommissionPercent
+    : data.commissionPercent;
+  if (data.commissionType === 'percent_total')   commissionBaseLabel = `${labelPercent}% of Total Rent`;
+  if (data.commissionType === 'percent_monthly') commissionBaseLabel = `${labelPercent}% of Monthly Rent`;
   if (data.commissionType === 'fixed')           commissionBaseLabel = 'Fixed Amount';
 
   // ── 6b. Currency-aware amount formatter
@@ -373,11 +377,12 @@ export const generateDocument = async (
   }
 
   // ── 9. Build filename with copy type suffix
-  const guestFirstName = primaryGuest?.name?.split(' ')[0] || 'Guest';
-  const villaSlug      = data.villaName
-    ? data.villaName.replace(/\s+/g, '_')
-    : 'Contract';
-  const filename = `Contract_${villaSlug}_${guestFirstName.replace(/\s+/g, '_')}_${data.copyType}.docx`;
+  // Allowlist safe filename chars — villa/guest names may contain slashes, control
+  // chars or reserved characters that would break the download or the OS.
+  const safe = (s: string) => (s || '').replace(/[^\w.-]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 60);
+  const guestFirstName = safe(primaryGuest?.name?.split(' ')[0] || '') || 'Guest';
+  const villaSlug      = safe(data.villaName || '') || 'Contract';
+  const filename = `Contract_${villaSlug}_${guestFirstName}_${data.copyType}.docx`;
 
   const outBuffer = doc.getZip().generate({
     type: 'arraybuffer',

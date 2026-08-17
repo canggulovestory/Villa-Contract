@@ -401,9 +401,11 @@ export const fetchVillaListFromSheets = async (): Promise<VillaRow[]> => {
 
   if (nameCol === -1) throw new Error('Could not find a villa name column ("Listing title" / "Name") in the sheet');
 
-  // Parse a price cell — strips non-numeric chars (Rp, commas, spaces) → number
+  // Parse a price cell → number. IDR villa prices use '.' or ',' as thousands
+  // separators (e.g. "30.000.000"); parseFloat stops at the first dot and returns 30,
+  // so strip ALL non-digits before parsing (villa prices are whole IDR amounts).
   const parsePrice = (raw: string): number => {
-    const n = parseFloat(raw.replace(/[^\d.]/g, ''));
+    const n = parseInt((raw || '').replace(/\D/g, ''), 10);
     return isNaN(n) ? 0 : n;
   };
 
