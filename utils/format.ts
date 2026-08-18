@@ -3,10 +3,10 @@
 
 export const SECURITY_DEPOSIT_RATE = 0.10; // 10% — change in one place
 
-export type PaymentCurrency = 'IDR' | 'USD' | 'EUR' | 'USDT';
+export type PaymentCurrency = 'IDR' | 'USD' | 'EUR' | 'USDT' | 'AUD';
 
 export const CURRENCY_SYMBOLS: Record<PaymentCurrency, string> = {
-  IDR: 'Rp', USD: '$', EUR: '€', USDT: 'USDT',
+  IDR: 'Rp', USD: '$', EUR: '€', USDT: 'USDT', AUD: 'A$',
 };
 
 /** Format a number for display based on selected currency */
@@ -43,6 +43,10 @@ export const formatDate = (dateStr: string): string => {
     if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
       // new Date(year, month-1, day) → local midnight, no UTC offset issue
       const d = new Date(parts[0], parts[1] - 1, parts[2]);
+      // Reject invalid dates that silently roll over (e.g. 2026-02-31 → 3 March)
+      if (d.getFullYear() !== parts[0] || d.getMonth() !== parts[1] - 1 || d.getDate() !== parts[2]) {
+        return dateStr;
+      }
       return new Intl.DateTimeFormat('id-ID', {
         day: 'numeric',
         month: 'long',
